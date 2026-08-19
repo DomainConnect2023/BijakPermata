@@ -1,0 +1,12 @@
+{
+  "ViewUser": 1,
+  "CreateUser": 2,
+  "EditUser": 3,
+  "DeleteUser": 4,
+  "ViewAccess": 5,
+  "PurchaseDetail": 6,
+  "SalesDetail": 7,
+  "MarginReport": 8,
+  "DailyBalance": 9,
+  "DetailTransaction": 10
+}
