@@ -11,7 +11,12 @@ function RootNavigator() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        headerBackButtonDisplayMode: 'minimal',
+      }}
+    >
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(app)" />
         <Stack.Screen
