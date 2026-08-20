@@ -46,7 +46,6 @@ export function DailyBalanceReportScreen() {
   ]);
 
   const [date, setDate] = useState(new Date());
-  const [appliedDate, setAppliedDate] = useState(date);
   const [showPicker, setShowPicker] = useState(false);
   const [items, setItems] = useState<DailyBalanceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,20 +68,16 @@ export function DailyBalanceReportScreen() {
     if (permissionLoading || !access.DailyBalance) return;
     (async () => {
       setLoading(true);
-      await loadReport(appliedDate);
+      await loadReport(date);
       setLoading(false);
     })();
-  }, [appliedDate, loadReport, permissionLoading, access.DailyBalance]);
+  }, [date, loadReport, permissionLoading, access.DailyBalance]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadReport(appliedDate);
+    await loadReport(date);
     setRefreshing(false);
-  }, [appliedDate, loadReport]);
-
-  function applyFilters() {
-    setAppliedDate(date);
-  }
+  }, [date, loadReport]);
 
   function handleValueChange(
     _event: DateTimePickerChangeEvent,
@@ -202,17 +197,6 @@ export function DailyBalanceReportScreen() {
           <Text style={styles.dateText}>{formatDisplayDate(date)}</Text>
           <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
         </Pressable>
-
-        <Pressable
-          onPress={applyFilters}
-          style={({ pressed }) => [
-            styles.searchButton,
-            pressed && styles.searchButtonPressed,
-          ]}
-        >
-          <Ionicons name="search" size={16} color="#FFFFFF" />
-          <Text style={styles.searchButtonText}>Search</Text>
-        </Pressable>
       </View>
 
       {!loading && !errorMessage && items.length > 0 && (
@@ -278,7 +262,7 @@ export function DailyBalanceReportScreen() {
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() => loadReport(appliedDate)}
+            onPress={() => loadReport(date)}
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />
@@ -324,7 +308,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
-    gap: Spacing.two,
   },
   dateSelector: {
     flexDirection: "row",
@@ -345,23 +328,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
-  },
-  searchButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.two,
-    backgroundColor: BRAND_COLOR,
-    paddingVertical: Spacing.two + 4,
-    borderRadius: 12,
-  },
-  searchButtonPressed: {
-    opacity: 0.85,
-  },
-  searchButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
   },
   // 汇总卡片
   summaryCard: {

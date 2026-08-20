@@ -25,6 +25,7 @@ import {
   type DetailTransactionStatus,
   fetchCurrencyList,
   fetchDetailTransactions,
+  parseDateParam,
 } from "@/services/report-api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -83,14 +84,22 @@ function getStatusMeta(status: string) {
 
 type ActivePicker = "from" | "to" | null;
 
-export function DetailTransactionReportScreen() {
+type Props = {
+  initialDate?: string;
+};
+
+export function DetailTransactionReportScreen({ initialDate }: Props) {
   const insets = useSafeAreaInsets();
   const { loading: permissionLoading, access } = usePageAccess([
     "DetailTransaction",
   ]);
 
-  const [fromDate, setFromDate] = useState(daysAgo(30));
-  const [toDate, setToDate] = useState(startOfDay(new Date()));
+  const [fromDate, setFromDate] = useState(() =>
+    initialDate ? parseDateParam(initialDate) : daysAgo(30),
+  );
+  const [toDate, setToDate] = useState(() =>
+    initialDate ? parseDateParam(initialDate) : startOfDay(new Date()),
+  );
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
 
   const [currencies, setCurrencies] = useState<string[]>([]);
@@ -174,6 +183,22 @@ export function DetailTransactionReportScreen() {
       toDate,
       currency: selectedCurrency,
       status: selectedStatus,
+    });
+  }
+
+  const [appliedInitialDate, setAppliedInitialDate] = useState(initialDate);
+  if (initialDate && initialDate !== appliedInitialDate) {
+    setAppliedInitialDate(initialDate);
+    const date = parseDateParam(initialDate);
+    setFromDate(date);
+    setToDate(date);
+    setSelectedCurrency(null);
+    setSelectedStatus("ALL");
+    setAppliedFilters({
+      fromDate: date,
+      toDate: date,
+      currency: null,
+      status: "ALL",
     });
   }
 

@@ -1,5 +1,9 @@
-import { PurchaseDetailReportScreen } from '@/screens/purchasing/purchase-detail-report-screen';
+import { useLocalSearchParams } from "expo-router";
+
+import { PurchaseDetailReportScreen } from "@/screens/purchasing/purchase-detail-report-screen";
 
 export default function PurchaseDetailReport() {
-  return <PurchaseDetailReportScreen />;
+  const { date } = useLocalSearchParams<{ date?: string }>();
+
+  return <PurchaseDetailReportScreen initialDate={date} />;
 }

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,6 +23,7 @@ import {
   type DashboardData,
   fetchDashboard,
 } from "@/services/dashboard-api";
+import { formatDateParam } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
 const SUCCESS_COLOR = "#22C55E";
@@ -95,8 +97,8 @@ function balancePercent(item: BalanceChartItem, total: number): string {
 }
 
 export function DashboardScreen() {
+  const router = useRouter();
   const [date, setDate] = useState(new Date());
-  const [appliedDate, setAppliedDate] = useState(date);
   const [showPicker, setShowPicker] = useState(false);
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -124,19 +126,43 @@ export function DashboardScreen() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await loadDashboard(appliedDate);
+      await loadDashboard(date);
       setLoading(false);
     })();
-  }, [appliedDate, loadDashboard]);
+  }, [date, loadDashboard]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadDashboard(appliedDate);
+    await loadDashboard(date);
     setRefreshing(false);
-  }, [appliedDate, loadDashboard]);
+  }, [date, loadDashboard]);
 
-  function applyFilters() {
-    setAppliedDate(date);
+  function goToTransactions() {
+    router.push({
+      pathname: "/transaction",
+      params: { date: formatDateParam(date) },
+    });
+  }
+
+  function goToSales() {
+    router.push({
+      pathname: "/sales/sales-detail-report",
+      params: { date: formatDateParam(date) },
+    });
+  }
+
+  function goToPurchasing() {
+    router.push({
+      pathname: "/purchasing/purchase-detail-report",
+      params: { date: formatDateParam(date) },
+    });
+  }
+
+  function goToMargin() {
+    router.push({
+      pathname: "/margin",
+      params: { date: formatDateParam(date) },
+    });
   }
 
   function handleValueChange(
@@ -200,17 +226,6 @@ export function DashboardScreen() {
           <Text style={styles.dateText}>{formatDisplayDate(date)}</Text>
           <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
         </Pressable>
-
-        <Pressable
-          onPress={applyFilters}
-          style={({ pressed }) => [
-            styles.searchButton,
-            pressed && styles.searchButtonPressed,
-          ]}
-        >
-          <Ionicons name="search" size={16} color="#FFFFFF" />
-          <Text style={styles.searchButtonText}>Search</Text>
-        </Pressable>
       </View>
 
       {Platform.OS === "android" && showPicker && (
@@ -259,7 +274,7 @@ export function DashboardScreen() {
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() => loadDashboard(appliedDate)}
+            onPress={() => loadDashboard(date)}
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />
@@ -295,76 +310,113 @@ export function DashboardScreen() {
               </Text>
             </View>
 
-            <View style={styles.statTile}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: `${BRAND_COLOR}15` },
-                ]}
-              >
-                <Ionicons
-                  name="swap-horizontal-outline"
-                  size={18}
-                  color={BRAND_COLOR}
-                />
+            <Pressable
+              onPress={goToTransactions}
+              style={({ pressed }) => [
+                styles.statTile,
+                pressed && styles.statTilePressed,
+              ]}
+            >
+              <View style={styles.statTileHeader}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: `${BRAND_COLOR}15` },
+                  ]}
+                >
+                  <Ionicons
+                    name="swap-horizontal-outline"
+                    size={18}
+                    color={BRAND_COLOR}
+                  />
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
               </View>
               <Text style={styles.statLabel}>Transactions</Text>
               <Text style={styles.statValue}>
                 {formatCount(dashboard?.transactionCount ?? 0)}
               </Text>
-            </View>
+            </Pressable>
 
-            <View style={styles.statTile}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: `${SUCCESS_COLOR}15` },
-                ]}
-              >
-                <Ionicons
-                  name="trending-up-outline"
-                  size={18}
-                  color={SUCCESS_COLOR}
-                />
+            <Pressable
+              onPress={goToSales}
+              style={({ pressed }) => [
+                styles.statTile,
+                pressed && styles.statTilePressed,
+              ]}
+            >
+              <View style={styles.statTileHeader}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: `${SUCCESS_COLOR}15` },
+                  ]}
+                >
+                  <Ionicons
+                    name="trending-up-outline"
+                    size={18}
+                    color={SUCCESS_COLOR}
+                  />
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
               </View>
               <Text style={styles.statLabel}>Total Sales</Text>
               <Text style={styles.statValue}>
                 RM {formatAmount(dashboard?.totalSalesRM ?? 0)}
               </Text>
-            </View>
+            </Pressable>
 
-            <View style={styles.statTile}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: `${BRAND_COLOR}15` },
-                ]}
-              >
-                <Ionicons name="cart-outline" size={18} color={BRAND_COLOR} />
+            <Pressable
+              onPress={goToPurchasing}
+              style={({ pressed }) => [
+                styles.statTile,
+                pressed && styles.statTilePressed,
+              ]}
+            >
+              <View style={styles.statTileHeader}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: `${BRAND_COLOR}15` },
+                  ]}
+                >
+                  <Ionicons name="cart-outline" size={18} color={BRAND_COLOR} />
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
               </View>
               <Text style={styles.statLabel}>Total Buy</Text>
               <Text style={styles.statValue}>
                 RM {formatAmount(dashboard?.totalBuyRM ?? 0)}
               </Text>
-            </View>
+            </Pressable>
 
-            <View style={[styles.statTile, styles.statTileWide]}>
-              <View
-                style={[
-                  styles.statIcon,
-                  {
-                    backgroundColor:
-                      grossProfit >= 0
-                        ? `${SUCCESS_COLOR}15`
-                        : `${ERROR_COLOR}15`,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="cash-outline"
-                  size={18}
-                  color={grossProfit >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
-                />
+            <Pressable
+              onPress={goToMargin}
+              style={({ pressed }) => [
+                styles.statTile,
+                styles.statTileWide,
+                pressed && styles.statTilePressed,
+              ]}
+            >
+              <View style={styles.statTileHeader}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    {
+                      backgroundColor:
+                        grossProfit >= 0
+                          ? `${SUCCESS_COLOR}15`
+                          : `${ERROR_COLOR}15`,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="cash-outline"
+                    size={18}
+                    color={grossProfit >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
+                  />
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
               </View>
               <Text style={styles.statLabel}>Gross Profit</Text>
               <Text
@@ -375,7 +427,7 @@ export function DashboardScreen() {
               >
                 RM {formatAmount(grossProfit)}
               </Text>
-            </View>
+            </Pressable>
           </View>
 
           <View style={styles.card}>
@@ -573,24 +625,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111827",
   },
-  searchButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.two,
-    backgroundColor: BRAND_COLOR,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
-    borderRadius: 12,
-  },
-  searchButtonPressed: {
-    opacity: 0.85,
-  },
-  searchButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -685,6 +719,14 @@ const styles = StyleSheet.create({
   },
   statTileWide: {
     flexBasis: "100%",
+  },
+  statTilePressed: {
+    opacity: 0.7,
+  },
+  statTileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   statIcon: {
     width: 32,

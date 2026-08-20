@@ -1,5 +1,9 @@
-import { SalesDetailReportScreen } from '@/screens/sales/sales-detail-report-screen';
+import { useLocalSearchParams } from "expo-router";
+
+import { SalesDetailReportScreen } from "@/screens/sales/sales-detail-report-screen";
 
 export default function SalesDetailReport() {
-  return <SalesDetailReportScreen />;
+  const { date } = useLocalSearchParams<{ date?: string }>();
+
+  return <SalesDetailReportScreen initialDate={date} />;
 }

@@ -21,6 +21,7 @@ import { usePageAccess } from "@/hooks/use-page-access";
 import {
   type MarginProfitItem,
   fetchMarginProfit,
+  parseDateParam,
 } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
@@ -60,13 +61,21 @@ function formatAmount(value: number): string {
 
 type ActivePicker = "from" | "to" | null;
 
-export function MarginReportScreen() {
+type Props = {
+  initialDate?: string;
+};
+
+export function MarginReportScreen({ initialDate }: Props) {
   const { loading: permissionLoading, access } = usePageAccess([
     "MarginReport",
   ]);
 
-  const [fromDate, setFromDate] = useState(daysAgo(30));
-  const [toDate, setToDate] = useState(startOfDay(new Date()));
+  const [fromDate, setFromDate] = useState(() =>
+    initialDate ? parseDateParam(initialDate) : daysAgo(30),
+  );
+  const [toDate, setToDate] = useState(() =>
+    initialDate ? parseDateParam(initialDate) : startOfDay(new Date()),
+  );
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
 
   const [appliedFilters, setAppliedFilters] = useState({ fromDate, toDate });
@@ -120,6 +129,15 @@ export function MarginReportScreen() {
 
   function applyFilters() {
     setAppliedFilters({ fromDate, toDate });
+  }
+
+  const [appliedInitialDate, setAppliedInitialDate] = useState(initialDate);
+  if (initialDate && initialDate !== appliedInitialDate) {
+    setAppliedInitialDate(initialDate);
+    const date = parseDateParam(initialDate);
+    setFromDate(date);
+    setToDate(date);
+    setAppliedFilters({ fromDate: date, toDate: date });
   }
 
   function handleValueChange(
