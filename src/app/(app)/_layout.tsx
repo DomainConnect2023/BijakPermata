@@ -1,7 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Drawer } from "expo-router/drawer";
-import { Dimensions, Pressable, StyleSheet, View } from "react-native";
+import {
+  Dimensions,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
@@ -18,6 +24,12 @@ const MENU_ITEMS: {
   activeIcon?: React.ComponentProps<typeof Ionicons>["name"];
 }[] = [
   {
+    name: "dashboard",
+    title: "Dashboard",
+    icon: "home-outline",
+    activeIcon: "home",
+  },
+  {
     name: "purchasing",
     title: "Purchasing",
     icon: "cart-outline",
@@ -28,6 +40,12 @@ const MENU_ITEMS: {
     title: "Sales",
     icon: "trending-up-outline",
     activeIcon: "trending-up",
+  },
+  {
+    name: "margin",
+    title: "Margin",
+    icon: "analytics-outline",
+    activeIcon: "analytics",
   },
   {
     name: "daily",
@@ -88,7 +106,11 @@ function CustomDrawerContent({ navigation, state, ...props }: any) {
       </View>
 
       {/* Menu Items - 使用自定义 Pressable 替代 DrawerItem */}
-      <View style={styles.menuSection}>
+      <ScrollView
+        style={styles.menuSection}
+        contentContainerStyle={styles.menuSectionContent}
+        showsVerticalScrollIndicator={false}
+      >
         {MENU_ITEMS.map((item) => {
           const isActive = activeRoute === item.name;
           return (
@@ -123,7 +145,7 @@ function CustomDrawerContent({ navigation, state, ...props }: any) {
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* Footer Section */}
       <View
@@ -156,7 +178,7 @@ export default function AppLayout() {
 
   return (
     <Drawer
-      initialRouteName="purchasing"
+      initialRouteName="dashboard"
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
         headerTintColor: theme.text,
@@ -258,6 +280,8 @@ const styles = StyleSheet.create({
   },
   menuSection: {
     flex: 1,
+  },
+  menuSectionContent: {
     paddingVertical: 16,
     paddingHorizontal: 8,
   },

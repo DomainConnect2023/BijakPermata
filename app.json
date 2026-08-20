@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.domainconnect2023.BijakPermata"
+      "package": "com.bijakpermata"
     },
     "web": {
       "output": "static",

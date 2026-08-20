@@ -32,15 +32,6 @@ export default function SalesLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="margin-report"
-        options={{
-          title: 'Margin Report',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="analytics-outline" color={color} size={size} />
-          ),
-        }}
-      />
     </Tabs>
   );
 }

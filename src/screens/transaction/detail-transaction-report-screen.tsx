@@ -25,6 +25,7 @@ import {
   type DetailTransactionStatus,
   fetchCurrencyList,
   fetchDetailTransactions,
+  parseDateParam,
 } from "@/services/report-api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -83,14 +84,22 @@ function getStatusMeta(status: string) {
 
 type ActivePicker = "from" | "to" | null;
 
-export function DetailTransactionReportScreen() {
+type Props = {
+  initialDate?: string;
+};
+
+export function DetailTransactionReportScreen({ initialDate }: Props) {
   const insets = useSafeAreaInsets();
   const { loading: permissionLoading, access } = usePageAccess([
     "DetailTransaction",
   ]);
 
-  const [fromDate, setFromDate] = useState(daysAgo(30));
-  const [toDate, setToDate] = useState(startOfDay(new Date()));
+  const [fromDate, setFromDate] = useState(() =>
+    initialDate ? parseDateParam(initialDate) : daysAgo(30),
+  );
+  const [toDate, setToDate] = useState(() =>
+    initialDate ? parseDateParam(initialDate) : startOfDay(new Date()),
+  );
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
 
   const [currencies, setCurrencies] = useState<string[]>([]);
@@ -99,6 +108,13 @@ export function DetailTransactionReportScreen() {
   const [currencySearch, setCurrencySearch] = useState("");
   const [selectedStatus, setSelectedStatus] =
     useState<DetailTransactionStatus>("ALL");
+
+  const [appliedFilters, setAppliedFilters] = useState({
+    fromDate,
+    toDate,
+    currency: selectedCurrency,
+    status: selectedStatus,
+  });
 
   const [items, setItems] = useState<DetailTransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,24 +156,51 @@ export function DetailTransactionReportScreen() {
     if (permissionLoading || !access.DetailTransaction) return;
     (async () => {
       setLoading(true);
-      await loadReport(fromDate, toDate, selectedCurrency, selectedStatus);
+      await loadReport(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+        appliedFilters.currency,
+        appliedFilters.status,
+      );
       setLoading(false);
     })();
-  }, [
-    fromDate,
-    toDate,
-    selectedCurrency,
-    selectedStatus,
-    loadReport,
-    permissionLoading,
-    access.DetailTransaction,
-  ]);
+  }, [appliedFilters, loadReport, permissionLoading, access.DetailTransaction]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadReport(fromDate, toDate, selectedCurrency, selectedStatus);
+    await loadReport(
+      appliedFilters.fromDate,
+      appliedFilters.toDate,
+      appliedFilters.currency,
+      appliedFilters.status,
+    );
     setRefreshing(false);
-  }, [fromDate, toDate, selectedCurrency, selectedStatus, loadReport]);
+  }, [appliedFilters, loadReport]);
+
+  function applyFilters() {
+    setAppliedFilters({
+      fromDate,
+      toDate,
+      currency: selectedCurrency,
+      status: selectedStatus,
+    });
+  }
+
+  const [appliedInitialDate, setAppliedInitialDate] = useState(initialDate);
+  if (initialDate && initialDate !== appliedInitialDate) {
+    setAppliedInitialDate(initialDate);
+    const date = parseDateParam(initialDate);
+    setFromDate(date);
+    setToDate(date);
+    setSelectedCurrency(null);
+    setSelectedStatus("ALL");
+    setAppliedFilters({
+      fromDate: date,
+      toDate: date,
+      currency: null,
+      status: "ALL",
+    });
+  }
 
   function handleValueChange(
     _event: DateTimePickerChangeEvent,
@@ -278,6 +321,17 @@ export function DetailTransactionReportScreen() {
             );
           })}
         </View>
+
+        <Pressable
+          onPress={applyFilters}
+          style={({ pressed }) => [
+            styles.searchButton,
+            pressed && styles.searchButtonPressed,
+          ]}
+        >
+          <Ionicons name="search" size={16} color="#FFFFFF" />
+          <Text style={styles.searchButtonText}>Search</Text>
+        </Pressable>
       </View>
 
       {!loading && !errorMessage && items.length > 0 && (
@@ -434,7 +488,12 @@ export function DetailTransactionReportScreen() {
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
             onPress={() =>
-              loadReport(fromDate, toDate, selectedCurrency, selectedStatus)
+              loadReport(
+                appliedFilters.fromDate,
+                appliedFilters.toDate,
+                appliedFilters.currency,
+                appliedFilters.status,
+              )
             }
             style={styles.retryButton}
           >
@@ -626,6 +685,23 @@ const styles = StyleSheet.create({
   },
   statusOptionTextActive: {
     color: "#FFFFFF",
+  },
+  searchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.two,
+    backgroundColor: BRAND_COLOR,
+    paddingVertical: Spacing.two + 4,
+    borderRadius: 12,
+  },
+  searchButtonPressed: {
+    opacity: 0.85,
+  },
+  searchButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   summaryCard: {
     flexDirection: "row",
