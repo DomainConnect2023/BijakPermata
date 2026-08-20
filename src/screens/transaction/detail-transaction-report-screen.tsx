@@ -100,6 +100,13 @@ export function DetailTransactionReportScreen() {
   const [selectedStatus, setSelectedStatus] =
     useState<DetailTransactionStatus>("ALL");
 
+  const [appliedFilters, setAppliedFilters] = useState({
+    fromDate,
+    toDate,
+    currency: selectedCurrency,
+    status: selectedStatus,
+  });
+
   const [items, setItems] = useState<DetailTransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -140,24 +147,35 @@ export function DetailTransactionReportScreen() {
     if (permissionLoading || !access.DetailTransaction) return;
     (async () => {
       setLoading(true);
-      await loadReport(fromDate, toDate, selectedCurrency, selectedStatus);
+      await loadReport(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+        appliedFilters.currency,
+        appliedFilters.status,
+      );
       setLoading(false);
     })();
-  }, [
-    fromDate,
-    toDate,
-    selectedCurrency,
-    selectedStatus,
-    loadReport,
-    permissionLoading,
-    access.DetailTransaction,
-  ]);
+  }, [appliedFilters, loadReport, permissionLoading, access.DetailTransaction]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadReport(fromDate, toDate, selectedCurrency, selectedStatus);
+    await loadReport(
+      appliedFilters.fromDate,
+      appliedFilters.toDate,
+      appliedFilters.currency,
+      appliedFilters.status,
+    );
     setRefreshing(false);
-  }, [fromDate, toDate, selectedCurrency, selectedStatus, loadReport]);
+  }, [appliedFilters, loadReport]);
+
+  function applyFilters() {
+    setAppliedFilters({
+      fromDate,
+      toDate,
+      currency: selectedCurrency,
+      status: selectedStatus,
+    });
+  }
 
   function handleValueChange(
     _event: DateTimePickerChangeEvent,
@@ -278,6 +296,17 @@ export function DetailTransactionReportScreen() {
             );
           })}
         </View>
+
+        <Pressable
+          onPress={applyFilters}
+          style={({ pressed }) => [
+            styles.searchButton,
+            pressed && styles.searchButtonPressed,
+          ]}
+        >
+          <Ionicons name="search" size={16} color="#FFFFFF" />
+          <Text style={styles.searchButtonText}>Search</Text>
+        </Pressable>
       </View>
 
       {!loading && !errorMessage && items.length > 0 && (
@@ -434,7 +463,12 @@ export function DetailTransactionReportScreen() {
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
             onPress={() =>
-              loadReport(fromDate, toDate, selectedCurrency, selectedStatus)
+              loadReport(
+                appliedFilters.fromDate,
+                appliedFilters.toDate,
+                appliedFilters.currency,
+                appliedFilters.status,
+              )
             }
             style={styles.retryButton}
           >
@@ -626,6 +660,23 @@ const styles = StyleSheet.create({
   },
   statusOptionTextActive: {
     color: "#FFFFFF",
+  },
+  searchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.two,
+    backgroundColor: BRAND_COLOR,
+    paddingVertical: Spacing.two + 4,
+    borderRadius: 12,
+  },
+  searchButtonPressed: {
+    opacity: 0.85,
+  },
+  searchButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   summaryCard: {
     flexDirection: "row",

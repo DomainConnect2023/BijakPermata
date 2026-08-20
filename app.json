@@ -8,7 +8,8 @@
     "scheme": "bijakpermata",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "org.bijakpermata"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.domainconnect2023.BijakPermata"
+      "package": "com.bijakpermata"
     },
     "web": {
       "output": "static",

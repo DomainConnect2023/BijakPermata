@@ -69,6 +69,8 @@ export function MarginReportScreen() {
   const [toDate, setToDate] = useState(startOfDay(new Date()));
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
 
+  const [appliedFilters, setAppliedFilters] = useState({ fromDate, toDate });
+
   const [items, setItems] = useState<MarginProfitItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -105,16 +107,20 @@ export function MarginReportScreen() {
     if (permissionLoading || !access.MarginReport) return;
     (async () => {
       setLoading(true);
-      await loadReport(fromDate, toDate);
+      await loadReport(appliedFilters.fromDate, appliedFilters.toDate);
       setLoading(false);
     })();
-  }, [fromDate, toDate, loadReport, permissionLoading, access.MarginReport]);
+  }, [appliedFilters, loadReport, permissionLoading, access.MarginReport]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadReport(fromDate, toDate);
+    await loadReport(appliedFilters.fromDate, appliedFilters.toDate);
     setRefreshing(false);
-  }, [fromDate, toDate, loadReport]);
+  }, [appliedFilters, loadReport]);
+
+  function applyFilters() {
+    setAppliedFilters({ fromDate, toDate });
+  }
 
   function handleValueChange(
     _event: DateTimePickerChangeEvent,
@@ -273,6 +279,17 @@ export function MarginReportScreen() {
             </View>
           </Pressable>
         </View>
+
+        <Pressable
+          onPress={applyFilters}
+          style={({ pressed }) => [
+            styles.searchButton,
+            pressed && styles.searchButtonPressed,
+          ]}
+        >
+          <Ionicons name="search" size={16} color="#FFFFFF" />
+          <Text style={styles.searchButtonText}>Search</Text>
+        </Pressable>
       </View>
 
       {!loading && !errorMessage && items.length > 0 && (
@@ -408,7 +425,9 @@ export function MarginReportScreen() {
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() => loadReport(fromDate, toDate)}
+            onPress={() =>
+              loadReport(appliedFilters.fromDate, appliedFilters.toDate)
+            }
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />
@@ -454,6 +473,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
+    gap: Spacing.two,
   },
   dateRangeRow: {
     flexDirection: "row",
@@ -486,6 +506,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  searchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.two,
+    backgroundColor: BRAND_COLOR,
+    paddingVertical: Spacing.two + 4,
+    borderRadius: 12,
+  },
+  searchButtonPressed: {
+    opacity: 0.85,
+  },
+  searchButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   summaryCard: {
     flexDirection: "row",
