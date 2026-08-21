@@ -67,10 +67,7 @@ type Props = {
   initialToDate?: string;
 };
 
-export function MarginReportScreen({
-  initialFromDate,
-  initialToDate,
-}: Props) {
+export function MarginReportScreen({ initialFromDate, initialToDate }: Props) {
   const { loading: permissionLoading, access } = usePageAccess([
     "MarginReport",
   ]);
@@ -244,7 +241,12 @@ export function MarginReportScreen({
           <>
             <View style={styles.divider} />
             <View style={styles.statsGrid}>
-              {renderStatBlock("Opening Stock", item.ob, item.obrm, item.currency)}
+              {renderStatBlock(
+                "Opening Stock",
+                item.ob,
+                item.obrm,
+                item.currency,
+              )}
               {renderStatBlock("Purchase", item.buy, item.buyRM, item.currency)}
               {renderStatBlock("Sales", item.sale, item.saleRM, item.currency)}
               {renderStatBlock(
@@ -254,7 +256,7 @@ export function MarginReportScreen({
                 item.currency,
               )}
               <View style={styles.statBlock}>
-                <Text style={styles.statBlockLabel}>Profit</Text>
+                <Text style={styles.statBlockLabel}>Margin</Text>
                 <Text
                   style={[
                     styles.statBlockAmountRM,
@@ -411,8 +413,7 @@ export function MarginReportScreen({
                 />
                 <Text style={styles.legendLabel}>Other</Text>
                 <Text style={styles.legendPercent}>
-                  {((breakdown.otherTotal / breakdown.total) * 100).toFixed(1)}
-                  %
+                  {((breakdown.otherTotal / breakdown.total) * 100).toFixed(1)}%
                 </Text>
               </View>
             )}
