@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,6 +19,8 @@ import {
 } from "react-native";
 
 import { AccessDeniedView } from "@/components/access-denied-view";
+import { AmountRangeInputs } from "@/components/amount-range-inputs";
+import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
 import {
@@ -72,6 +75,16 @@ function formatAmount(value: number): string {
   });
 }
 
+function parseAmountLow(text: string): number {
+  const value = Number(text.trim());
+  return text.trim() !== "" && Number.isFinite(value) ? value : 0;
+}
+
+function parseAmountHigh(text: string): number {
+  const value = Number(text.trim());
+  return text.trim() !== "" && Number.isFinite(value) ? value : Infinity;
+}
+
 function getStatusMeta(status: string) {
   if (status === "B") {
     return { label: "Buy", color: "#22C55E", background: "#22C55E15" };
@@ -85,22 +98,27 @@ function getStatusMeta(status: string) {
 type ActivePicker = "from" | "to" | null;
 
 type Props = {
-  initialDate?: string;
+  initialFromDate?: string;
+  initialToDate?: string;
 };
 
-export function DetailTransactionReportScreen({ initialDate }: Props) {
+export function DetailTransactionReportScreen({
+  initialFromDate,
+  initialToDate,
+}: Props) {
   const insets = useSafeAreaInsets();
   const { loading: permissionLoading, access } = usePageAccess([
     "DetailTransaction",
   ]);
 
   const [fromDate, setFromDate] = useState(() =>
-    initialDate ? parseDateParam(initialDate) : daysAgo(30),
+    initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
   );
   const [toDate, setToDate] = useState(() =>
-    initialDate ? parseDateParam(initialDate) : startOfDay(new Date()),
+    initialToDate ? parseDateParam(initialToDate) : startOfDay(new Date()),
   );
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
+  const [filtersExpanded, setFiltersExpanded] = useState(true);
 
   const [currencies, setCurrencies] = useState<string[]>([]);
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
@@ -114,9 +132,15 @@ export function DetailTransactionReportScreen({ initialDate }: Props) {
     toDate,
     currency: selectedCurrency,
     status: selectedStatus,
+    amountLow: 0,
+    amountHigh: Infinity,
   });
 
   const [items, setItems] = useState<DetailTransactionItem[]>([]);
+  // Draft amount inputs the user is editing; only take effect once committed
+  // into appliedFilters via the Search button, same as dates.
+  const [amountLowText, setAmountLowText] = useState("");
+  const [amountHighText, setAmountHighText] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -183,23 +207,50 @@ export function DetailTransactionReportScreen({ initialDate }: Props) {
       toDate,
       currency: selectedCurrency,
       status: selectedStatus,
+      amountLow: parseAmountLow(amountLowText),
+      amountHigh: parseAmountHigh(amountHighText),
     });
+    setFiltersExpanded(false);
   }
 
-  const [appliedInitialDate, setAppliedInitialDate] = useState(initialDate);
-  if (initialDate && initialDate !== appliedInitialDate) {
-    setAppliedInitialDate(initialDate);
-    const date = parseDateParam(initialDate);
-    setFromDate(date);
-    setToDate(date);
+  // Clear the amount filter every time this screen is entered/refocused, so
+  // a filter picked on a previous visit doesn't silently carry over.
+  useFocusEffect(
+    useCallback(() => {
+      setAmountLowText("");
+      setAmountHighText("");
+      setAppliedFilters((prev) => ({
+        ...prev,
+        amountLow: 0,
+        amountHigh: Infinity,
+      }));
+    }, []),
+  );
+
+  const incomingRangeKey =
+    initialFromDate && initialToDate
+      ? `${initialFromDate}|${initialToDate}`
+      : undefined;
+  const [appliedRangeKey, setAppliedRangeKey] = useState(incomingRangeKey);
+  if (incomingRangeKey && incomingRangeKey !== appliedRangeKey) {
+    setAppliedRangeKey(incomingRangeKey);
+    const from = parseDateParam(initialFromDate!);
+    const to = parseDateParam(initialToDate!);
+    setFromDate(from);
+    setToDate(to);
     setSelectedCurrency(null);
     setSelectedStatus("ALL");
+    setAmountLowText("");
+    setAmountHighText("");
     setAppliedFilters({
-      fromDate: date,
-      toDate: date,
+      fromDate: from,
+      toDate: to,
       currency: null,
       status: "ALL",
+      amountLow: 0,
+      amountHigh: Infinity,
     });
+    setFiltersExpanded(false);
   }
 
   function handleValueChange(
@@ -232,7 +283,12 @@ export function DetailTransactionReportScreen({ initialDate }: Props) {
     code.trim().toLowerCase().includes(currencySearch.trim().toLowerCase()),
   );
 
-  const totalRM = items.reduce((sum, item) => sum + item.rm, 0);
+  const visibleItems = items.filter(
+    (item) =>
+      item.rm >= appliedFilters.amountLow &&
+      item.rm <= appliedFilters.amountHigh,
+  );
+  const totalRM = visibleItems.reduce((sum, item) => sum + item.rm, 0);
 
   if (permissionLoading) {
     return (
@@ -251,98 +307,118 @@ export function DetailTransactionReportScreen({ initialDate }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.headerSection}>
-        <View style={styles.dateRangeRow}>
-          <Pressable
-            onPress={() => setActivePicker("from")}
-            style={({ pressed }) => [
-              styles.dateSelector,
-              pressed && styles.dateSelectorPressed,
-            ]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
-            <View>
-              <Text style={styles.dateSelectorLabel}>From</Text>
-              <Text style={styles.dateText}>{formatDisplayDate(fromDate)}</Text>
-            </View>
-          </Pressable>
-
-          <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
-
-          <Pressable
-            onPress={() => setActivePicker("to")}
-            style={({ pressed }) => [
-              styles.dateSelector,
-              pressed && styles.dateSelectorPressed,
-            ]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
-            <View>
-              <Text style={styles.dateSelectorLabel}>To</Text>
-              <Text style={styles.dateText}>{formatDisplayDate(toDate)}</Text>
-            </View>
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={() => setCurrencyModalVisible(true)}
-          style={({ pressed }) => [
-            styles.currencySelector,
-            pressed && styles.dateSelectorPressed,
-          ]}
+        <CollapsibleFilterSection
+          expanded={filtersExpanded}
+          onToggle={() => setFiltersExpanded((prev) => !prev)}
+          summary={`${formatDisplayDate(appliedFilters.fromDate)} – ${formatDisplayDate(appliedFilters.toDate)}`}
+          activeColor={BRAND_COLOR}
         >
-          <Ionicons name="cash-outline" size={18} color={BRAND_COLOR} />
-          <Text style={styles.currencySelectorText}>
-            {selectedCurrency ? selectedCurrency.trim() : "All Currencies"}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </Pressable>
+          <View style={styles.dateRangeRow}>
+            <Pressable
+              onPress={() => setActivePicker("from")}
+              style={({ pressed }) => [
+                styles.dateSelector,
+                pressed && styles.dateSelectorPressed,
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
+              <View>
+                <Text style={styles.dateSelectorLabel}>From</Text>
+                <Text style={styles.dateText}>
+                  {formatDisplayDate(fromDate)}
+                </Text>
+              </View>
+            </Pressable>
 
-        <View style={styles.statusRow}>
-          {STATUS_OPTIONS.map((option) => {
-            const active = selectedStatus === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => setSelectedStatus(option.value)}
-                style={[
-                  styles.statusOption,
-                  active && styles.statusOptionActive,
-                ]}
-              >
-                <Text
+            <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
+
+            <Pressable
+              onPress={() => setActivePicker("to")}
+              style={({ pressed }) => [
+                styles.dateSelector,
+                pressed && styles.dateSelectorPressed,
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
+              <View>
+                <Text style={styles.dateSelectorLabel}>To</Text>
+                <Text style={styles.dateText}>{formatDisplayDate(toDate)}</Text>
+              </View>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={() => setCurrencyModalVisible(true)}
+            style={({ pressed }) => [
+              styles.currencySelector,
+              pressed && styles.dateSelectorPressed,
+            ]}
+          >
+            <Ionicons name="cash-outline" size={18} color={BRAND_COLOR} />
+            <Text style={styles.currencySelectorText}>
+              {selectedCurrency ? selectedCurrency.trim() : "All Currencies"}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+          </Pressable>
+
+          <View style={styles.statusRow}>
+            {STATUS_OPTIONS.map((option) => {
+              const active = selectedStatus === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setSelectedStatus(option.value)}
                   style={[
-                    styles.statusOptionText,
-                    active && styles.statusOptionTextActive,
+                    styles.statusOption,
+                    active && styles.statusOptionActive,
                   ]}
                 >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                  <Text
+                    style={[
+                      styles.statusOptionText,
+                      active && styles.statusOptionTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
-        <Pressable
-          onPress={applyFilters}
-          style={({ pressed }) => [
-            styles.searchButton,
-            pressed && styles.searchButtonPressed,
-          ]}
-        >
-          <Ionicons name="search" size={16} color="#FFFFFF" />
-          <Text style={styles.searchButtonText}>Search</Text>
-        </Pressable>
+          <View style={styles.amountFilterSection}>
+            <Text style={styles.amountFilterLabel}>Amount Range (RM)</Text>
+            <AmountRangeInputs
+              lowText={amountLowText}
+              highText={amountHighText}
+              onLowChange={setAmountLowText}
+              onHighChange={setAmountHighText}
+              activeColor={BRAND_COLOR}
+            />
+          </View>
+
+          <Pressable
+            onPress={applyFilters}
+            style={({ pressed }) => [
+              styles.searchButton,
+              pressed && styles.searchButtonPressed,
+            ]}
+          >
+            <Ionicons name="search" size={16} color="#FFFFFF" />
+            <Text style={styles.searchButtonText}>Search</Text>
+          </Pressable>
+        </CollapsibleFilterSection>
       </View>
 
-      {!loading && !errorMessage && items.length > 0 && (
+      {!loading && !errorMessage && visibleItems.length > 0 && (
         <View style={styles.summaryCard}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Transactions</Text>
-            <Text style={styles.summaryValue}>{items.length}</Text>
+            <Text style={styles.summaryValue}>{visibleItems.length}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total RM</Text>
+            <Text style={styles.summaryLabel}>Total RM (Amount)</Text>
             <Text style={styles.summaryValue}>RM {formatAmount(totalRM)}</Text>
           </View>
         </View>
@@ -503,7 +579,7 @@ export function DetailTransactionReportScreen({ initialDate }: Props) {
         </View>
       ) : (
         <FlatList
-          data={items}
+          data={visibleItems}
           keyExtractor={(item, index) => `${item.receiptNo}-${index}`}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -522,7 +598,9 @@ export function DetailTransactionReportScreen({ initialDate }: Props) {
                 color="#D1D5DB"
               />
               <Text style={styles.emptyText}>No transactions found</Text>
-              <Text style={styles.emptySubtext}>for this filter</Text>
+              <Text style={styles.emptySubtext}>
+                {items.length > 0 ? "for this amount range" : "for this filter"}
+              </Text>
             </View>
           }
           renderItem={({ item }) => {
@@ -739,6 +817,26 @@ const styles = StyleSheet.create({
     width: 1,
     backgroundColor: "#F3F4F6",
     marginVertical: 4,
+  },
+  amountFilterSection: {
+    gap: Spacing.two,
+  },
+  amountFilterHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  amountFilterLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  amountFilterValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#111827",
   },
   modalOverlay: {
     flex: 1,

@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { AccessDeniedView } from "@/components/access-denied-view";
+import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
 import {
@@ -62,21 +63,26 @@ function formatAmount(value: number): string {
 type ActivePicker = "from" | "to" | null;
 
 type Props = {
-  initialDate?: string;
+  initialFromDate?: string;
+  initialToDate?: string;
 };
 
-export function MarginReportScreen({ initialDate }: Props) {
+export function MarginReportScreen({
+  initialFromDate,
+  initialToDate,
+}: Props) {
   const { loading: permissionLoading, access } = usePageAccess([
     "MarginReport",
   ]);
 
   const [fromDate, setFromDate] = useState(() =>
-    initialDate ? parseDateParam(initialDate) : daysAgo(30),
+    initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
   );
   const [toDate, setToDate] = useState(() =>
-    initialDate ? parseDateParam(initialDate) : startOfDay(new Date()),
+    initialToDate ? parseDateParam(initialToDate) : startOfDay(new Date()),
   );
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
+  const [filtersExpanded, setFiltersExpanded] = useState(true);
 
   const [appliedFilters, setAppliedFilters] = useState({ fromDate, toDate });
 
@@ -129,15 +135,22 @@ export function MarginReportScreen({ initialDate }: Props) {
 
   function applyFilters() {
     setAppliedFilters({ fromDate, toDate });
+    setFiltersExpanded(false);
   }
 
-  const [appliedInitialDate, setAppliedInitialDate] = useState(initialDate);
-  if (initialDate && initialDate !== appliedInitialDate) {
-    setAppliedInitialDate(initialDate);
-    const date = parseDateParam(initialDate);
-    setFromDate(date);
-    setToDate(date);
-    setAppliedFilters({ fromDate: date, toDate: date });
+  const incomingRangeKey =
+    initialFromDate && initialToDate
+      ? `${initialFromDate}|${initialToDate}`
+      : undefined;
+  const [appliedRangeKey, setAppliedRangeKey] = useState(incomingRangeKey);
+  if (incomingRangeKey && incomingRangeKey !== appliedRangeKey) {
+    setAppliedRangeKey(incomingRangeKey);
+    const from = parseDateParam(initialFromDate!);
+    const to = parseDateParam(initialToDate!);
+    setFromDate(from);
+    setToDate(to);
+    setAppliedFilters({ fromDate: from, toDate: to });
+    setFiltersExpanded(false);
   }
 
   function handleValueChange(
@@ -264,50 +277,57 @@ export function MarginReportScreen({ initialDate }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.headerSection}>
-        <View style={styles.dateRangeRow}>
-          <Pressable
-            onPress={() => setActivePicker("from")}
-            style={({ pressed }) => [
-              styles.dateSelector,
-              pressed && styles.dateSelectorPressed,
-            ]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
-            <View>
-              <Text style={styles.dateSelectorLabel}>From</Text>
-              <Text style={styles.dateText}>
-                {formatDisplayDate(fromDate)}
-              </Text>
-            </View>
-          </Pressable>
-
-          <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
-
-          <Pressable
-            onPress={() => setActivePicker("to")}
-            style={({ pressed }) => [
-              styles.dateSelector,
-              pressed && styles.dateSelectorPressed,
-            ]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
-            <View>
-              <Text style={styles.dateSelectorLabel}>To</Text>
-              <Text style={styles.dateText}>{formatDisplayDate(toDate)}</Text>
-            </View>
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={applyFilters}
-          style={({ pressed }) => [
-            styles.searchButton,
-            pressed && styles.searchButtonPressed,
-          ]}
+        <CollapsibleFilterSection
+          expanded={filtersExpanded}
+          onToggle={() => setFiltersExpanded((prev) => !prev)}
+          summary={`${formatDisplayDate(appliedFilters.fromDate)} – ${formatDisplayDate(appliedFilters.toDate)}`}
+          activeColor={BRAND_COLOR}
         >
-          <Ionicons name="search" size={16} color="#FFFFFF" />
-          <Text style={styles.searchButtonText}>Search</Text>
-        </Pressable>
+          <View style={styles.dateRangeRow}>
+            <Pressable
+              onPress={() => setActivePicker("from")}
+              style={({ pressed }) => [
+                styles.dateSelector,
+                pressed && styles.dateSelectorPressed,
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
+              <View>
+                <Text style={styles.dateSelectorLabel}>From</Text>
+                <Text style={styles.dateText}>
+                  {formatDisplayDate(fromDate)}
+                </Text>
+              </View>
+            </Pressable>
+
+            <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
+
+            <Pressable
+              onPress={() => setActivePicker("to")}
+              style={({ pressed }) => [
+                styles.dateSelector,
+                pressed && styles.dateSelectorPressed,
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
+              <View>
+                <Text style={styles.dateSelectorLabel}>To</Text>
+                <Text style={styles.dateText}>{formatDisplayDate(toDate)}</Text>
+              </View>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={applyFilters}
+            style={({ pressed }) => [
+              styles.searchButton,
+              pressed && styles.searchButtonPressed,
+            ]}
+          >
+            <Ionicons name="search" size={16} color="#FFFFFF" />
+            <Text style={styles.searchButtonText}>Search</Text>
+          </Pressable>
+        </CollapsibleFilterSection>
       </View>
 
       {!loading && !errorMessage && items.length > 0 && (

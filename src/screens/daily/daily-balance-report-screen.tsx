@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { AccessDeniedView } from "@/components/access-denied-view";
+import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
 import {
@@ -47,6 +48,7 @@ export function DailyBalanceReportScreen() {
 
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(true);
   const [items, setItems] = useState<DailyBalanceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,6 +88,7 @@ export function DailyBalanceReportScreen() {
     setDate(selected);
     if (Platform.OS === "android") {
       setShowPicker(false);
+      setFiltersExpanded(false);
     }
   }
 
@@ -186,17 +189,24 @@ export function DailyBalanceReportScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.headerSection}>
-        <Pressable
-          onPress={() => setShowPicker(true)}
-          style={({ pressed }) => [
-            styles.dateSelector,
-            pressed && styles.dateSelectorPressed,
-          ]}
+        <CollapsibleFilterSection
+          expanded={filtersExpanded}
+          onToggle={() => setFiltersExpanded((prev) => !prev)}
+          summary={formatDisplayDate(date)}
+          activeColor={BRAND_COLOR}
         >
-          <Ionicons name="calendar-outline" size={22} color={BRAND_COLOR} />
-          <Text style={styles.dateText}>{formatDisplayDate(date)}</Text>
-          <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
-        </Pressable>
+          <Pressable
+            onPress={() => setShowPicker(true)}
+            style={({ pressed }) => [
+              styles.dateSelector,
+              pressed && styles.dateSelectorPressed,
+            ]}
+          >
+            <Ionicons name="calendar-outline" size={22} color={BRAND_COLOR} />
+            <Text style={styles.dateText}>{formatDisplayDate(date)}</Text>
+            <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
+          </Pressable>
+        </CollapsibleFilterSection>
       </View>
 
       {!loading && !errorMessage && items.length > 0 && (
@@ -236,7 +246,12 @@ export function DailyBalanceReportScreen() {
             <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Date</Text>
-                <Pressable onPress={() => setShowPicker(false)}>
+                <Pressable
+                  onPress={() => {
+                    setShowPicker(false);
+                    setFiltersExpanded(false);
+                  }}
+                >
                   <Text style={styles.modalDone}>Done</Text>
                 </Pressable>
               </View>

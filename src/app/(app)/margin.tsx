@@ -3,7 +3,12 @@ import { useLocalSearchParams } from "expo-router";
 import { MarginReportScreen } from "@/screens/margin/margin-report-screen";
 
 export default function Margin() {
-  const { date } = useLocalSearchParams<{ date?: string }>();
+  const { fromDate, toDate } = useLocalSearchParams<{
+    fromDate?: string;
+    toDate?: string;
+  }>();
 
-  return <MarginReportScreen initialDate={date} />;
+  return (
+    <MarginReportScreen initialFromDate={fromDate} initialToDate={toDate} />
+  );
 }

@@ -1,5 +1,23 @@
 import { apiGet, getIPAddress } from "@/services/api-client";
 
+export type DataRiskType = "LOW" | "MED" | "AVE" | "HIGH";
+
+export type DataRiskItem = {
+  riskType: DataRiskType;
+  total: number;
+};
+
+export async function fetchDataRisk(
+  startDate: Date,
+  endDate: Date,
+): Promise<DataRiskItem[]> {
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+  return apiGet<DataRiskItem[]>(`/Report/GetDataRisk?${params.toString()}`);
+}
+
 export type DailyBalanceItem = {
   currency: string;
   balance: number;
@@ -196,6 +214,7 @@ export type PurchaseSalesTransactionItem = {
 export type PurchaseSalesGroup = {
   currency: string;
   totalFCAmount: number;
+  totalFCAmountRM: number;
   items: PurchaseSalesTransactionItem[];
 };
 

@@ -1,0 +1,56 @@
+diff --git a/node_modules/react-native-gifted-charts/dist/PieChart/index.js b/node_modules/react-native-gifted-charts/dist/PieChart/index.js
+index d007211..f0e1cb5 100644
+--- a/node_modules/react-native-gifted-charts/dist/PieChart/index.js
++++ b/node_modules/react-native-gifted-charts/dist/PieChart/index.js
+@@ -38,6 +38,17 @@ export var PieChart = function (props) {
+     var _a = usePieChart(props), radius = _a.radius, extraRadius = _a.extraRadius, selectedIndex = _a.selectedIndex, setSelectedIndex = _a.setSelectedIndex, startAngle = _a.startAngle, total = _a.total, donut = _a.donut, isThreeD = _a.isThreeD, semiCircle = _a.semiCircle, inwardExtraLengthForFocused = _a.inwardExtraLengthForFocused, canvasWidth = _a.canvasWidth, canvasHeight = _a.canvasHeight, innerRadius = _a.innerRadius, innerCircleColor = _a.innerCircleColor, innerCircleBorderWidth = _a.innerCircleBorderWidth, innerCircleBorderColor = _a.innerCircleBorderColor, shiftInnerCenterX = _a.shiftInnerCenterX, shiftInnerCenterY = _a.shiftInnerCenterY, tiltAngle = _a.tiltAngle, isDataShifted = _a.isDataShifted, paddingHorizontal = _a.paddingHorizontal, paddingVertical = _a.paddingVertical, data = _a.data, showTooltip = _a.showTooltip, tooltipHorizontalShift = _a.tooltipHorizontalShift, tooltipVerticalShift = _a.tooltipVerticalShift, tooltipComponent = _a.tooltipComponent, getTooltipText = _a.getTooltipText, tooltipBackgroundColor = _a.tooltipBackgroundColor, tooltipBorderRadius = _a.tooltipBorderRadius, tooltipWidth = _a.tooltipWidth, tooltipTextNoOfLines = _a.tooltipTextNoOfLines, textColor = _a.textColor, textSize = _a.textSize, font = _a.font, fontWeight = _a.fontWeight, fontStyle = _a.fontStyle, tooltipSelectedIndex = _a.tooltipSelectedIndex, setTooltipSelectedIndex = _a.setTooltipSelectedIndex, rotatable = _a.rotatable;
+     var _b = __read(useState(0), 2), touchX = _b[0], setTouchX = _b[1];
+     var _c = __read(useState(0), 2), touchY = _c[0], setTouchY = _c[1];
++    // Patch: usePieChart owns its own internal selectedIndex state and
++    // ignores props.selectedIndex/props.setSelectedIndex entirely, so a
++    // caller-controlled selection was silently dropped. Forward internal
++    // changes out to the caller's setSelectedIndex when provided, so tapping
++    // a slice notifies the app the same way tapping an external legend does.
++    var notifyingSetSelectedIndex = function (value) {
++        setSelectedIndex(value);
++        if (props.setSelectedIndex) {
++            props.setSelectedIndex(value);
++        }
++    };
+     var renderInnerCircle = function (innerRadius, innerCircleBorderWidth) {
+         var _a, _b;
+         if (props.centerLabelComponent || (donut && !isDataShifted)) {
+@@ -126,7 +137,7 @@ export var PieChart = function (props) {
+                     (props.semiCircle ? 1 : 2),
+                 width: (radius + extraRadius + paddingHorizontal / 2) * 2,
+                 overflow: 'hidden',
+-            }, children: [_jsx(View, { style: { position: 'absolute' }, children: _jsx(PieChartMain, __assign({}, props, { setTouchX: setTouchX, setTouchY: setTouchY, tooltipSelectedIndex: tooltipSelectedIndex, setTooltipSelectedIndex: setTooltipSelectedIndex, selectedIndex: selectedIndex, setSelectedIndex: setSelectedIndex, paddingHorizontal: paddingHorizontal, paddingVertical: paddingVertical, extraRadius: extraRadius })) }), renderInnerCircle(innerRadius, innerCircleBorderWidth), props.data.length > 1 &&
++            }, children: [_jsx(View, { style: { position: 'absolute' }, children: _jsx(PieChartMain, __assign({}, props, { setTouchX: setTouchX, setTouchY: setTouchY, tooltipSelectedIndex: tooltipSelectedIndex, setTooltipSelectedIndex: setTooltipSelectedIndex, selectedIndex: selectedIndex, setSelectedIndex: notifyingSetSelectedIndex, paddingHorizontal: paddingHorizontal, paddingVertical: paddingVertical, extraRadius: extraRadius })) }), renderInnerCircle(innerRadius, innerCircleBorderWidth), props.data.length > 1 &&
+                     props.data[selectedIndex] && // don't forget to add this one so there are no errors when the data is empty / updating
+                     (props.focusOnPress || props.sectionAutoFocus) &&
+                     selectedIndex !== -1 && (_jsx(View, { pointerEvents: "box-none", style: {
+@@ -144,7 +155,7 @@ export var PieChart = function (props) {
+                                 peripheral: true,
+                                 strokeWidth: 0,
+                             },
+-                        ], radius: radius + extraRadius, initialAngle: startAngle, innerRadius: props.innerRadius || radius / 2.5, isBiggerPie: true, selectedIndex: selectedIndex, setSelectedIndex: setSelectedIndex, paddingHorizontal: paddingHorizontal, paddingVertical: paddingVertical, extraRadius: extraRadius })) })), renderInnerCircle(innerRadius - inwardExtraLengthForFocused, inwardExtraLengthForFocused ? 0 : innerCircleBorderWidth), showTooltip && tooltipSelectedIndex !== -1 ? renderTooltip() : null] }));
++                        ], radius: radius + extraRadius, initialAngle: startAngle, innerRadius: props.innerRadius || radius / 2.5, isBiggerPie: true, selectedIndex: selectedIndex, setSelectedIndex: notifyingSetSelectedIndex, paddingHorizontal: paddingHorizontal, paddingVertical: paddingVertical, extraRadius: extraRadius })) })), renderInnerCircle(innerRadius - inwardExtraLengthForFocused, inwardExtraLengthForFocused ? 0 : innerCircleBorderWidth), showTooltip && tooltipSelectedIndex !== -1 ? renderTooltip() : null] }));
+     };
+     if (rotatable && !semiCircle) {
+         return (_jsx(RotatablePie, { children: [_jsx(PieChartBody, {}, "PieChartBody")], initialAngle: startAngle, size: radius * 2 }));
+diff --git a/node_modules/react-native-gifted-charts/dist/PieChart/main.js b/node_modules/react-native-gifted-charts/dist/PieChart/main.js
+index b64b603..b8681ab 100644
+--- a/node_modules/react-native-gifted-charts/dist/PieChart/main.js
++++ b/node_modules/react-native-gifted-charts/dist/PieChart/main.js
+@@ -32,8 +32,9 @@ export var PieChartMain = function (props) {
+     var onPressHandler = function (e) {
+         var x = 0, y = 0;
+         if (isWebApp) {
+-            x = e.clientX - left;
+-            y = e.clientY - top;
++            var rect = e.currentTarget.getBoundingClientRect();
++            x = e.clientX - rect.left;
++            y = e.clientY - rect.top;
+         }
+         else {
+             x = e.nativeEvent.locationX;

@@ -22,13 +22,39 @@ import {
   type BalanceChartItem,
   type DashboardData,
   fetchDashboard,
+  fetchDashboardByMonth,
+  fetchDashboardByYear,
 } from "@/services/dashboard-api";
 import { formatDateParam } from "@/services/report-api";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const BRAND_COLOR = "#208AEF";
 const SUCCESS_COLOR = "#22C55E";
 const ERROR_COLOR = "#EF4444";
 const OTHER_COLOR = "#9CA3AF";
+
+type DashboardTab = "daily" | "monthly" | "yearly";
+
+const TAB_OPTIONS: { value: DashboardTab; label: string }[] = [
+  { value: "daily", label: "Daily" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+];
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
 // Fixed, colorblind-safe categorical order — never cycled. Currencies beyond
 // this count (or an explicit "Other" bucket from the API) fold into the
@@ -72,6 +98,28 @@ function formatDisplayDate(date: Date): string {
   });
 }
 
+function formatMonthYearDisplay(year: number, month: number): string {
+  return `${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+function isCurrentOrFutureMonth(year: number, month: number): boolean {
+  const now = new Date();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth() + 1;
+  return year > nowYear || (year === nowYear && month >= nowMonth);
+}
+
+function getMonthRange(year: number, month: number): { from: Date; to: Date } {
+  return {
+    from: new Date(year, month - 1, 1),
+    to: new Date(year, month, 0), // day 0 of next month = last day of this one
+  };
+}
+
+function getYearRange(year: number): { from: Date; to: Date } {
+  return { from: new Date(year, 0, 1), to: new Date(year, 11, 31) };
+}
+
 function formatAmount(value: number): string {
   return value.toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -83,7 +131,16 @@ function formatCount(value: number): string {
   return value.toLocaleString("en-US");
 }
 
-function formatMonthLabel(monthValue: string): string {
+// profitChart label formats differ per tab: "YYYY-MM-DD" for daily,
+// "YYYY-MM" for monthly, and a bare "YYYY" for yearly (used as-is).
+function formatDayLabel(dateValue: string): string {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  if (!year || !month || !day) return dateValue;
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
+function formatMonthTrendLabel(monthValue: string): string {
   const [year, month] = monthValue.split("-").map(Number);
   if (!year || !month) return monthValue;
   const date = new Date(year, month - 1, 1);
@@ -96,10 +153,85 @@ function balancePercent(item: BalanceChartItem, total: number): string {
   return `${((Math.max(item.value, 0) / total) * 100).toFixed(1)}%`;
 }
 
+type StatTileProps = {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  iconColor: string;
+  iconBackground: string;
+  label: string;
+  value: string;
+  valueColor?: string;
+  wide?: boolean;
+  onPress?: () => void;
+};
+
+function StatTile({
+  icon,
+  iconColor,
+  iconBackground,
+  label,
+  value,
+  valueColor,
+  wide,
+  onPress,
+}: StatTileProps) {
+  const content = (
+    <>
+      <View style={styles.statTileHeader}>
+        <View style={[styles.statIcon, { backgroundColor: iconBackground }]}>
+          <Ionicons name={icon} size={18} color={iconColor} />
+        </View>
+        {onPress && (
+          <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+        )}
+      </View>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text
+        style={[styles.statValue, valueColor ? { color: valueColor } : null]}
+      >
+        {value}
+      </Text>
+    </>
+  );
+
+  if (!onPress) {
+    return (
+      <View style={[styles.statTile, wide && styles.statTileWide]}>
+        {content}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.statTile,
+        wide && styles.statTileWide,
+        pressed && styles.statTilePressed,
+      ]}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
 export function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [date, setDate] = useState(new Date());
-  const [showPicker, setShowPicker] = useState(false);
+  const [activeTab, setActiveTab] = useState<DashboardTab>("daily");
+
+  const [dailyDate, setDailyDate] = useState(() => new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const [monthYear, setMonthYear] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  });
+  const [monthPickerVisible, setMonthPickerVisible] = useState(false);
+  const [monthPickerYear, setMonthPickerYear] = useState(monthYear.year);
+
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [yearPickerVisible, setYearPickerVisible] = useState(false);
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [selectedCurrencyIndex, setSelectedCurrencyIndex] = useState<
@@ -110,58 +242,86 @@ export function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadDashboard = useCallback(async (forDate: Date) => {
-    setErrorMessage(null);
-    try {
-      const data = await fetchDashboard(forDate);
-      setDashboard(data);
-      setSelectedCurrencyIndex(null);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load dashboard",
-      );
-    }
-  }, []);
+  const loadDashboard = useCallback(
+    async (
+      tab: DashboardTab,
+      filters: {
+        dailyDate: Date;
+        monthYear: { year: number; month: number };
+        year: number;
+      },
+    ) => {
+      setErrorMessage(null);
+      try {
+        const data =
+          tab === "daily"
+            ? await fetchDashboard(filters.dailyDate)
+            : tab === "monthly"
+              ? await fetchDashboardByMonth(
+                  filters.monthYear.year,
+                  filters.monthYear.month,
+                )
+              : await fetchDashboardByYear(filters.year);
+        setDashboard(data);
+        setSelectedCurrencyIndex(null);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Failed to load dashboard",
+        );
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await loadDashboard(date);
+      await loadDashboard(activeTab, { dailyDate, monthYear, year });
       setLoading(false);
     })();
-  }, [date, loadDashboard]);
+  }, [activeTab, dailyDate, monthYear, year, loadDashboard]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadDashboard(date);
+    await loadDashboard(activeTab, { dailyDate, monthYear, year });
     setRefreshing(false);
-  }, [date, loadDashboard]);
+  }, [activeTab, dailyDate, monthYear, year, loadDashboard]);
+
+  function getDrillDownRange(): { from: Date; to: Date } {
+    if (activeTab === "monthly") return getMonthRange(monthYear.year, monthYear.month);
+    if (activeTab === "yearly") return getYearRange(year);
+    return { from: dailyDate, to: dailyDate };
+  }
 
   function goToTransactions() {
+    const { from, to } = getDrillDownRange();
     router.push({
       pathname: "/transaction",
-      params: { date: formatDateParam(date) },
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
     });
   }
 
   function goToSales() {
+    const { from, to } = getDrillDownRange();
     router.push({
       pathname: "/sales/sales-detail-report",
-      params: { date: formatDateParam(date) },
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
     });
   }
 
   function goToPurchasing() {
+    const { from, to } = getDrillDownRange();
     router.push({
       pathname: "/purchasing/purchase-detail-report",
-      params: { date: formatDateParam(date) },
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
     });
   }
 
   function goToMargin() {
+    const { from, to } = getDrillDownRange();
     router.push({
       pathname: "/margin",
-      params: { date: formatDateParam(date) },
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
     });
   }
 
@@ -169,14 +329,35 @@ export function DashboardScreen() {
     _event: DateTimePickerChangeEvent,
     selected: Date,
   ) {
-    setDate(selected);
+    setDailyDate(selected);
     if (Platform.OS === "android") {
-      setShowPicker(false);
+      setShowDatePicker(false);
     }
   }
 
   function handleDismiss() {
-    setShowPicker(false);
+    setShowDatePicker(false);
+  }
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = useMemo(
+    () => Array.from({ length: 21 }, (_, index) => currentYear - index),
+    [currentYear],
+  );
+
+  function openMonthPicker() {
+    setMonthPickerYear(monthYear.year);
+    setMonthPickerVisible(true);
+  }
+
+  function selectMonth(month: number) {
+    setMonthYear({ year: monthPickerYear, month });
+    setMonthPickerVisible(false);
+  }
+
+  function selectYear(selected: number) {
+    setYear(selected);
+    setYearPickerVisible(false);
   }
 
   const balanceChart = useMemo(
@@ -211,26 +392,86 @@ export function DashboardScreen() {
       : String(donutData.length);
 
   const grossProfit = dashboard?.totalGrossProfit ?? 0;
+  const formatTrendLabel =
+    activeTab === "daily"
+      ? formatDayLabel
+      : activeTab === "monthly"
+        ? formatMonthTrendLabel
+        : (label: string) => label;
 
   return (
     <View style={styles.container}>
       <View style={styles.headerSection}>
-        <Pressable
-          onPress={() => setShowPicker(true)}
-          style={({ pressed }) => [
-            styles.dateSelector,
-            pressed && styles.dateSelectorPressed,
-          ]}
-        >
-          <Ionicons name="calendar-outline" size={20} color={BRAND_COLOR} />
-          <Text style={styles.dateText}>{formatDisplayDate(date)}</Text>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </Pressable>
+        <View style={styles.tabRow}>
+          {TAB_OPTIONS.map((option) => {
+            const active = activeTab === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => setActiveTab(option.value)}
+                style={[styles.tabOption, active && styles.tabOptionActive]}
+              >
+                <Text
+                  style={[
+                    styles.tabOptionText,
+                    active && styles.tabOptionTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {activeTab === "daily" && (
+          <Pressable
+            onPress={() => setShowDatePicker(true)}
+            style={({ pressed }) => [
+              styles.dateSelector,
+              pressed && styles.dateSelectorPressed,
+            ]}
+          >
+            <Ionicons name="calendar-outline" size={20} color={BRAND_COLOR} />
+            <Text style={styles.dateText}>{formatDisplayDate(dailyDate)}</Text>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+          </Pressable>
+        )}
+
+        {activeTab === "monthly" && (
+          <Pressable
+            onPress={openMonthPicker}
+            style={({ pressed }) => [
+              styles.dateSelector,
+              pressed && styles.dateSelectorPressed,
+            ]}
+          >
+            <Ionicons name="calendar-outline" size={20} color={BRAND_COLOR} />
+            <Text style={styles.dateText}>
+              {formatMonthYearDisplay(monthYear.year, monthYear.month)}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+          </Pressable>
+        )}
+
+        {activeTab === "yearly" && (
+          <Pressable
+            onPress={() => setYearPickerVisible(true)}
+            style={({ pressed }) => [
+              styles.dateSelector,
+              pressed && styles.dateSelectorPressed,
+            ]}
+          >
+            <Ionicons name="calendar-outline" size={20} color={BRAND_COLOR} />
+            <Text style={styles.dateText}>{year}</Text>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+          </Pressable>
+        )}
       </View>
 
-      {Platform.OS === "android" && showPicker && (
+      {Platform.OS === "android" && showDatePicker && (
         <DateTimePicker
-          value={date}
+          value={dailyDate}
           mode="date"
           display="default"
           maximumDate={new Date()}
@@ -240,20 +481,20 @@ export function DashboardScreen() {
       )}
 
       {Platform.OS === "ios" && (
-        <Modal visible={showPicker} transparent animationType="slide">
+        <Modal visible={showDatePicker} transparent animationType="slide">
           <Pressable
             style={styles.modalOverlay}
-            onPress={() => setShowPicker(false)}
+            onPress={() => setShowDatePicker(false)}
           >
             <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select Date</Text>
-                <Pressable onPress={() => setShowPicker(false)}>
+                <Pressable onPress={() => setShowDatePicker(false)}>
                   <Text style={styles.modalDone}>Done</Text>
                 </Pressable>
               </View>
               <DateTimePicker
-                value={date}
+                value={dailyDate}
                 mode="date"
                 display="spinner"
                 maximumDate={new Date()}
@@ -263,6 +504,139 @@ export function DashboardScreen() {
           </Pressable>
         </Modal>
       )}
+
+      <Modal
+        visible={monthPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMonthPickerVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setMonthPickerVisible(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { paddingBottom: insets.bottom }]}
+            onPress={() => {}}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Month</Text>
+              <Pressable onPress={() => setMonthPickerVisible(false)}>
+                <Text style={styles.modalDone}>Close</Text>
+              </Pressable>
+            </View>
+            <View style={styles.yearStepperRow}>
+              <Pressable
+                onPress={() => setMonthPickerYear((prev) => prev - 1)}
+                style={styles.stepperButton}
+              >
+                <Ionicons name="chevron-back" size={20} color={BRAND_COLOR} />
+              </Pressable>
+              <Text style={styles.yearStepperValue}>{monthPickerYear}</Text>
+              <Pressable
+                onPress={() =>
+                  setMonthPickerYear((prev) => Math.min(prev + 1, currentYear))
+                }
+                disabled={monthPickerYear >= currentYear}
+                style={[
+                  styles.stepperButton,
+                  monthPickerYear >= currentYear &&
+                    styles.stepperButtonDisabled,
+                ]}
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={
+                    monthPickerYear >= currentYear ? "#D1D5DB" : BRAND_COLOR
+                  }
+                />
+              </Pressable>
+            </View>
+            <View style={styles.optionGrid}>
+              {MONTH_NAMES.map((name, index) => {
+                const monthNum = index + 1;
+                const disabled = isCurrentOrFutureMonth(
+                  monthPickerYear,
+                  monthNum,
+                );
+                const selected =
+                  monthPickerYear === monthYear.year &&
+                  monthNum === monthYear.month;
+                return (
+                  <Pressable
+                    key={name}
+                    disabled={disabled}
+                    onPress={() => selectMonth(monthNum)}
+                    style={[
+                      styles.optionTile,
+                      selected && styles.optionTileSelected,
+                      disabled && styles.optionTileDisabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.optionTileText,
+                        selected && styles.optionTileTextSelected,
+                      ]}
+                    >
+                      {name.slice(0, 3)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={yearPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setYearPickerVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setYearPickerVisible(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { paddingBottom: insets.bottom }]}
+            onPress={() => {}}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Year</Text>
+              <Pressable onPress={() => setYearPickerVisible(false)}>
+                <Text style={styles.modalDone}>Close</Text>
+              </Pressable>
+            </View>
+            <View style={styles.optionGrid}>
+              {yearOptions.map((option) => {
+                const selected = option === year;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => selectYear(option)}
+                    style={[
+                      styles.optionTile,
+                      selected && styles.optionTileSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.optionTileText,
+                        selected && styles.optionTileTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {loading ? (
         <View style={styles.centerContent}>
@@ -274,7 +648,9 @@ export function DashboardScreen() {
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() => loadDashboard(date)}
+            onPress={() =>
+              loadDashboard(activeTab, { dailyDate, monthYear, year })
+            }
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />
@@ -295,141 +671,50 @@ export function DashboardScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.statGrid}>
-            <View style={styles.statTile}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: `${BRAND_COLOR}15` },
-                ]}
-              >
-                <Ionicons name="people-outline" size={18} color={BRAND_COLOR} />
-              </View>
-              <Text style={styles.statLabel}>New Customers</Text>
-              <Text style={styles.statValue}>
-                {formatCount(dashboard?.newCustomerCount ?? 0)}
-              </Text>
-            </View>
-
-            <Pressable
+            <StatTile
+              icon="people-outline"
+              iconColor={BRAND_COLOR}
+              iconBackground={`${BRAND_COLOR}15`}
+              label="New Customers"
+              value={formatCount(dashboard?.newCustomerCount ?? 0)}
+            />
+            <StatTile
+              icon="swap-horizontal-outline"
+              iconColor={BRAND_COLOR}
+              iconBackground={`${BRAND_COLOR}15`}
+              label="Transactions"
+              value={formatCount(dashboard?.transactionCount ?? 0)}
               onPress={goToTransactions}
-              style={({ pressed }) => [
-                styles.statTile,
-                pressed && styles.statTilePressed,
-              ]}
-            >
-              <View style={styles.statTileHeader}>
-                <View
-                  style={[
-                    styles.statIcon,
-                    { backgroundColor: `${BRAND_COLOR}15` },
-                  ]}
-                >
-                  <Ionicons
-                    name="swap-horizontal-outline"
-                    size={18}
-                    color={BRAND_COLOR}
-                  />
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-              </View>
-              <Text style={styles.statLabel}>Transactions</Text>
-              <Text style={styles.statValue}>
-                {formatCount(dashboard?.transactionCount ?? 0)}
-              </Text>
-            </Pressable>
-
-            <Pressable
+            />
+            <StatTile
+              icon="trending-up-outline"
+              iconColor={SUCCESS_COLOR}
+              iconBackground={`${SUCCESS_COLOR}15`}
+              label="Total Sales"
+              value={`RM ${formatAmount(dashboard?.totalSalesRM ?? 0)}`}
               onPress={goToSales}
-              style={({ pressed }) => [
-                styles.statTile,
-                pressed && styles.statTilePressed,
-              ]}
-            >
-              <View style={styles.statTileHeader}>
-                <View
-                  style={[
-                    styles.statIcon,
-                    { backgroundColor: `${SUCCESS_COLOR}15` },
-                  ]}
-                >
-                  <Ionicons
-                    name="trending-up-outline"
-                    size={18}
-                    color={SUCCESS_COLOR}
-                  />
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-              </View>
-              <Text style={styles.statLabel}>Total Sales</Text>
-              <Text style={styles.statValue}>
-                RM {formatAmount(dashboard?.totalSalesRM ?? 0)}
-              </Text>
-            </Pressable>
-
-            <Pressable
+            />
+            <StatTile
+              icon="cart-outline"
+              iconColor={BRAND_COLOR}
+              iconBackground={`${BRAND_COLOR}15`}
+              label="Total Buy"
+              value={`RM ${formatAmount(dashboard?.totalBuyRM ?? 0)}`}
               onPress={goToPurchasing}
-              style={({ pressed }) => [
-                styles.statTile,
-                pressed && styles.statTilePressed,
-              ]}
-            >
-              <View style={styles.statTileHeader}>
-                <View
-                  style={[
-                    styles.statIcon,
-                    { backgroundColor: `${BRAND_COLOR}15` },
-                  ]}
-                >
-                  <Ionicons name="cart-outline" size={18} color={BRAND_COLOR} />
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-              </View>
-              <Text style={styles.statLabel}>Total Buy</Text>
-              <Text style={styles.statValue}>
-                RM {formatAmount(dashboard?.totalBuyRM ?? 0)}
-              </Text>
-            </Pressable>
-
-            <Pressable
+            />
+            <StatTile
+              wide
+              icon="cash-outline"
+              iconColor={grossProfit >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
+              iconBackground={
+                grossProfit >= 0 ? `${SUCCESS_COLOR}15` : `${ERROR_COLOR}15`
+              }
+              label="Gross Profit"
+              value={`RM ${formatAmount(grossProfit)}`}
+              valueColor={grossProfit >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
               onPress={goToMargin}
-              style={({ pressed }) => [
-                styles.statTile,
-                styles.statTileWide,
-                pressed && styles.statTilePressed,
-              ]}
-            >
-              <View style={styles.statTileHeader}>
-                <View
-                  style={[
-                    styles.statIcon,
-                    {
-                      backgroundColor:
-                        grossProfit >= 0
-                          ? `${SUCCESS_COLOR}15`
-                          : `${ERROR_COLOR}15`,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="cash-outline"
-                    size={18}
-                    color={grossProfit >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
-                  />
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-              </View>
-              <Text style={styles.statLabel}>Gross Profit</Text>
-              <Text
-                style={[
-                  styles.statValue,
-                  { color: grossProfit >= 0 ? SUCCESS_COLOR : ERROR_COLOR },
-                ]}
-              >
-                RM {formatAmount(grossProfit)}
-              </Text>
-            </Pressable>
+            />
           </View>
-
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Balance by Currency</Text>
             {donutData.length === 0 ? (
@@ -438,7 +723,7 @@ export function DashboardScreen() {
                 <Text style={styles.emptyText}>No balance data</Text>
               </View>
             ) : (
-              <View style={styles.donutRow}>
+              <View style={styles.donutSection}>
                 <PieChart
                   data={donutData.map((item) => ({
                     value: Math.max(item.value, 0),
@@ -450,7 +735,7 @@ export function DashboardScreen() {
                   innerCircleColor="#FFFFFF"
                   focusOnPress
                   toggleFocusOnPress
-                  selectedIndex={selectedCurrencyIndex ?? -1}
+                  focusedPieIndex={selectedCurrencyIndex ?? -1}
                   setSelectedIndex={(index: number) =>
                     setSelectedCurrencyIndex(index === -1 ? null : index)
                   }
@@ -469,7 +754,7 @@ export function DashboardScreen() {
                     </View>
                   )}
                 />
-                <View style={styles.legend}>
+                <View style={styles.legendGrid}>
                   {donutData.map((item, index) => {
                     const isSelected = selectedCurrencyIndex === index;
                     return (
@@ -479,24 +764,24 @@ export function DashboardScreen() {
                           setSelectedCurrencyIndex(isSelected ? null : index)
                         }
                         style={[
-                          styles.legendRow,
+                          styles.legendTile,
                           isSelected && styles.legendRowSelected,
                         ]}
                       >
-                        <View
-                          style={[
-                            styles.legendDot,
-                            { backgroundColor: item.color },
-                          ]}
-                        />
-                        <View style={styles.legendTextGroup}>
+                        <View style={styles.legendTileHeader}>
+                          <View
+                            style={[
+                              styles.legendDot,
+                              { backgroundColor: item.color },
+                            ]}
+                          />
                           <Text style={styles.legendLabel} numberOfLines={1}>
                             {item.label}
                           </Text>
-                          <Text style={styles.legendValue} numberOfLines={1}>
-                            {formatAmount(item.value)}
-                          </Text>
                         </View>
+                        <Text style={styles.legendValue} numberOfLines={1}>
+                          {formatAmount(item.value)}
+                        </Text>
                         <Text style={styles.legendPercent}>
                           {balancePercent(balanceChart[index], balanceTotal)}
                         </Text>
@@ -507,10 +792,9 @@ export function DashboardScreen() {
               </View>
             )}
           </View>
-
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Monthly Profit</Text>
-            {(dashboard?.monthlyProfitChart.length ?? 0) === 0 ? (
+            <Text style={styles.cardTitle}>Profit Trend</Text>
+            {(dashboard?.profitChart.length ?? 0) === 0 ? (
               <View style={styles.emptyChart}>
                 <Ionicons
                   name="stats-chart-outline"
@@ -527,9 +811,9 @@ export function DashboardScreen() {
               >
                 {lineChartWidth > 0 && (
                   <LineChart
-                    data={(dashboard?.monthlyProfitChart ?? []).map((item) => ({
-                      value: item.profit,
-                      label: formatMonthLabel(item.month),
+                    data={(dashboard?.profitChart ?? []).map((item) => ({
+                      value: item.value,
+                      label: formatTrendLabel(item.label),
                     }))}
                     height={180}
                     adjustToWidth
@@ -562,6 +846,7 @@ export function DashboardScreen() {
                       pointerColor: BRAND_COLOR,
                       radius: 6,
                       activatePointersInstantlyOnTouch: true,
+                      persistPointer: true,
                       autoAdjustPointerLabelPosition: true,
                       pointerLabelWidth: 110,
                       pointerLabelHeight: 40,
@@ -595,8 +880,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
   },
   headerSection: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#FFFFFF",
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
@@ -604,8 +887,32 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F3F4F6",
     gap: Spacing.two,
   },
-  dateSelector: {
+  tabRow: {
+    flexDirection: "row",
+    gap: Spacing.two,
+  },
+  tabOption: {
     flex: 1,
+    alignItems: "center",
+    paddingVertical: Spacing.two,
+    borderRadius: 12,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  tabOptionActive: {
+    backgroundColor: BRAND_COLOR,
+    borderColor: BRAND_COLOR,
+  },
+  tabOptionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  tabOptionTextActive: {
+    color: "#FFFFFF",
+  },
+  dateSelector: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.two,
@@ -624,6 +931,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  stepperButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  stepperButtonDisabled: {
+    opacity: 0.5,
   },
   modalOverlay: {
     flex: 1,
@@ -654,6 +974,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: BRAND_COLOR,
+  },
+  yearStepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.four,
+    paddingVertical: Spacing.three,
+  },
+  yearStepperValue: {
+    minWidth: 64,
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  optionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.four,
+  },
+  optionTile: {
+    flexBasis: "30%",
+    flexGrow: 1,
+    alignItems: "center",
+    paddingVertical: Spacing.three,
+    borderRadius: 12,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  optionTileSelected: {
+    backgroundColor: BRAND_COLOR,
+    borderColor: BRAND_COLOR,
+  },
+  optionTileDisabled: {
+    opacity: 0.4,
+  },
+  optionTileText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  optionTileTextSelected: {
+    color: "#FFFFFF",
   },
   centerContent: {
     flex: 1,
@@ -763,8 +1129,7 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginBottom: Spacing.three,
   },
-  donutRow: {
-    flexDirection: "row",
+  donutSection: {
     alignItems: "center",
     gap: Spacing.three,
   },
@@ -814,29 +1179,34 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginTop: 1,
   },
-  legend: {
-    flex: 1,
-    gap: 6,
-  },
-  legendRow: {
+  legendGrid: {
+    width: "100%",
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
     gap: Spacing.two,
-    paddingVertical: 4,
-    borderRadius: 8,
+  },
+  legendTile: {
+    flexBasis: "30%",
+    flexGrow: 1,
+    padding: Spacing.two,
+    borderRadius: 10,
+    gap: 2,
   },
   legendRowSelected: {
     backgroundColor: "#F9FAFB",
+  },
+  legendTileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   legendDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
   },
-  legendTextGroup: {
-    flex: 1,
-  },
   legendLabel: {
+    flex: 1,
     fontSize: 13,
     fontWeight: "600",
     color: "#111827",
@@ -844,7 +1214,6 @@ const styles = StyleSheet.create({
   legendValue: {
     fontSize: 11,
     color: "#6B7280",
-    marginTop: 1,
   },
   legendPercent: {
     fontSize: 12,

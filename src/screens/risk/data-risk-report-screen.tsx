@@ -2,37 +2,46 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Modal,
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 
-import { AccessDeniedView } from "@/components/access-denied-view";
-import { AmountRangeInputs } from "@/components/amount-range-inputs";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
-import { usePageAccess } from "@/hooks/use-page-access";
 import {
-  type PurchaseSalesGroup,
-  fetchPurchaseSales,
-  formatDateParam,
+  type DataRiskItem,
+  type DataRiskType,
+  fetchDataRisk,
   parseDateParam,
 } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
 
+const RISK_TYPES: { key: DataRiskType; label: string; color: string }[] = [
+  { key: "LOW", label: "Low Risk", color: "#22C55E" },
+  { key: "MED", label: "Medium Risk", color: "#F59E0B" },
+  { key: "AVE", label: "Average Risk", color: "#3B82F6" },
+  { key: "HIGH", label: "High Risk", color: "#EF4444" },
+];
+
 function startOfDay(date: Date): Date {
   const result = new Date(date);
   result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function daysAgo(days: number): Date {
+  const result = startOfDay(new Date());
+  result.setDate(result.getDate() - days);
   return result;
 }
 
@@ -44,21 +53,8 @@ function formatDisplayDate(date: Date): string {
   });
 }
 
-function formatAmount(value: number): string {
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function parseAmountLow(text: string): number {
-  const value = Number(text.trim());
-  return text.trim() !== "" && Number.isFinite(value) ? value : 0;
-}
-
-function parseAmountHigh(text: string): number {
-  const value = Number(text.trim());
-  return text.trim() !== "" && Number.isFinite(value) ? value : Infinity;
+function formatCount(value: number): string {
+  return value.toLocaleString("en-US");
 }
 
 type ActivePicker = "from" | "to" | null;
@@ -68,17 +64,12 @@ type Props = {
   initialToDate?: string;
 };
 
-export function PurchaseDetailReportScreen({
+export function DataRiskReportScreen({
   initialFromDate,
   initialToDate,
 }: Props) {
-  const router = useRouter();
-  const { loading: permissionLoading, access } = usePageAccess([
-    "PurchaseDetail",
-  ]);
-
   const [fromDate, setFromDate] = useState(() =>
-    initialFromDate ? parseDateParam(initialFromDate) : startOfDay(new Date()),
+    initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
   );
   const [toDate, setToDate] = useState(() =>
     initialToDate ? parseDateParam(initialToDate) : startOfDay(new Date()),
@@ -86,18 +77,9 @@ export function PurchaseDetailReportScreen({
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(true);
 
-  const [appliedFilters, setAppliedFilters] = useState({
-    fromDate,
-    toDate,
-    amountLow: 0,
-    amountHigh: Infinity,
-  });
+  const [appliedFilters, setAppliedFilters] = useState({ fromDate, toDate });
 
-  const [groups, setGroups] = useState<PurchaseSalesGroup[]>([]);
-  // Draft amount inputs the user is editing; only take effect once committed
-  // into appliedFilters via the Search button, same as dates.
-  const [amountLowText, setAmountLowText] = useState("");
-  const [amountHighText, setAmountHighText] = useState("");
+  const [items, setItems] = useState<DataRiskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -105,11 +87,8 @@ export function PurchaseDetailReportScreen({
   const loadReport = useCallback(async (from: Date, to: Date) => {
     setErrorMessage(null);
     try {
-      const data = await fetchPurchaseSales(from, to, "B");
-      const filtered = data.filter(
-        (group) => group.currency && group.currency !== "0",
-      );
-      setGroups(filtered);
+      const data = await fetchDataRisk(from, to);
+      setItems(data);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to load report",
@@ -118,13 +97,12 @@ export function PurchaseDetailReportScreen({
   }, []);
 
   useEffect(() => {
-    if (permissionLoading || !access.PurchaseDetail) return;
     (async () => {
       setLoading(true);
       await loadReport(appliedFilters.fromDate, appliedFilters.toDate);
       setLoading(false);
     })();
-  }, [appliedFilters, loadReport, permissionLoading, access.PurchaseDetail]);
+  }, [appliedFilters, loadReport]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -133,48 +111,7 @@ export function PurchaseDetailReportScreen({
   }, [appliedFilters, loadReport]);
 
   function applyFilters() {
-    setAppliedFilters({
-      fromDate,
-      toDate,
-      amountLow: parseAmountLow(amountLowText),
-      amountHigh: parseAmountHigh(amountHighText),
-    });
-    setFiltersExpanded(false);
-  }
-
-  // Clear the amount filter every time this screen is entered/refocused, so
-  // a filter picked on a previous visit doesn't silently carry over.
-  useFocusEffect(
-    useCallback(() => {
-      setAmountLowText("");
-      setAmountHighText("");
-      setAppliedFilters((prev) => ({
-        ...prev,
-        amountLow: 0,
-        amountHigh: Infinity,
-      }));
-    }, []),
-  );
-
-  const incomingRangeKey =
-    initialFromDate && initialToDate
-      ? `${initialFromDate}|${initialToDate}`
-      : undefined;
-  const [appliedRangeKey, setAppliedRangeKey] = useState(incomingRangeKey);
-  if (incomingRangeKey && incomingRangeKey !== appliedRangeKey) {
-    setAppliedRangeKey(incomingRangeKey);
-    const from = parseDateParam(initialFromDate!);
-    const to = parseDateParam(initialToDate!);
-    setFromDate(from);
-    setToDate(to);
-    setAmountLowText("");
-    setAmountHighText("");
-    setAppliedFilters({
-      fromDate: from,
-      toDate: to,
-      amountLow: 0,
-      amountHigh: Infinity,
-    });
+    setAppliedFilters({ fromDate, toDate });
     setFiltersExpanded(false);
   }
 
@@ -198,46 +135,13 @@ export function PurchaseDetailReportScreen({
     setActivePicker(null);
   }
 
-  function openCurrency(group: PurchaseSalesGroup) {
-    router.push({
-      pathname: "/purchase-detail-transactions",
-      params: {
-        currency: group.currency,
-        fromDate: formatDateParam(appliedFilters.fromDate),
-        toDate: formatDateParam(appliedFilters.toDate),
-      },
-    });
-  }
-
-  const visibleGroups = groups.filter(
-    (group) =>
-      group.totalFCAmountRM >= appliedFilters.amountLow &&
-      group.totalFCAmountRM <= appliedFilters.amountHigh,
-  );
-
-  const totalTransactions = visibleGroups.reduce(
-    (sum, group) => sum + group.items.length,
-    0,
-  );
-  const totalRM = visibleGroups.reduce(
-    (sum, group) =>
-      sum + group.items.reduce((itemSum, item) => itemSum + item.rm, 0),
-    0,
-  );
-
-  if (permissionLoading) {
-    return (
-      <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color={BRAND_COLOR} />
-      </View>
-    );
-  }
-
-  if (!access.PurchaseDetail) {
-    return (
-      <AccessDeniedView message="You don't have permission to view this report." />
-    );
-  }
+  // Always show all four risk buckets, defaulting missing ones to zero —
+  // the API only returns entries that have data for the selected range.
+  const breakdown = RISK_TYPES.map((meta) => {
+    const found = items.find((item) => item.riskType === meta.key);
+    return { ...meta, total: found?.total ?? 0 };
+  });
+  const grandTotal = breakdown.reduce((sum, item) => sum + item.total, 0);
 
   return (
     <View style={styles.container}>
@@ -259,9 +163,7 @@ export function PurchaseDetailReportScreen({
               <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
               <View>
                 <Text style={styles.dateSelectorLabel}>From</Text>
-                <Text style={styles.dateText}>
-                  {formatDisplayDate(fromDate)}
-                </Text>
+                <Text style={styles.dateText}>{formatDisplayDate(fromDate)}</Text>
               </View>
             </Pressable>
 
@@ -282,17 +184,6 @@ export function PurchaseDetailReportScreen({
             </Pressable>
           </View>
 
-          <View style={styles.amountFilterSection}>
-            <Text style={styles.amountFilterLabel}>Amount Range (RM)</Text>
-            <AmountRangeInputs
-              lowText={amountLowText}
-              highText={amountHighText}
-              onLowChange={setAmountLowText}
-              onHighChange={setAmountHighText}
-              activeColor={BRAND_COLOR}
-            />
-          </View>
-
           <Pressable
             onPress={applyFilters}
             style={({ pressed }) => [
@@ -305,20 +196,6 @@ export function PurchaseDetailReportScreen({
           </Pressable>
         </CollapsibleFilterSection>
       </View>
-
-      {!loading && !errorMessage && groups.length > 0 && (
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Transactions</Text>
-            <Text style={styles.summaryValue}>{totalTransactions}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total RM (Amount)</Text>
-            <Text style={styles.summaryValue}>RM {formatAmount(totalRM)}</Text>
-          </View>
-        </View>
-      )}
 
       {Platform.OS === "android" && activePicker !== null && (
         <DateTimePicker
@@ -384,9 +261,7 @@ export function PurchaseDetailReportScreen({
           </Pressable>
         </View>
       ) : (
-        <FlatList
-          data={visibleGroups}
-          keyExtractor={(group) => group.currency}
+        <ScrollView
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -396,49 +271,45 @@ export function PurchaseDetailReportScreen({
               colors={[BRAND_COLOR]}
             />
           }
-          ListEmptyComponent={
-            <View style={styles.centerContent}>
-              <Ionicons name="cart-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyText}>No purchases found</Text>
-              <Text style={styles.emptySubtext}>
-                {groups.length > 0
-                  ? "for this amount range"
-                  : "for this date range"}
-              </Text>
-            </View>
-          }
-          renderItem={({ item: group }) => (
-            <Pressable
-              onPress={() => openCurrency(group)}
-              style={({ pressed }) => [
-                styles.currencyCard,
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <View style={styles.badgeCircle}>
-                <Text style={styles.badgeText}>{group.currency.trim()}</Text>
-              </View>
-              <View style={styles.currencyInfo}>
-                <Text style={styles.currencyAmount}>
-                  {group.currency.trim()} {formatAmount(group.totalFCAmount)}
-                </Text>
-                <Text style={styles.currencyRM}>
-                  ≈ RM {formatAmount(group.totalFCAmountRM)}
-                </Text>
-                <Text style={styles.currencySubtext}>
-                  {group.items.length} transaction
-                  {group.items.length === 1 ? "" : "s"}
-                </Text>
-              </View>
-              <Ionicons
-                name="chevron-forward-outline"
-                size={20}
-                color="#9CA3AF"
-              />
-            </Pressable>
-          )}
           showsVerticalScrollIndicator={false}
-        />
+        >
+          <View style={styles.riskCard}>
+            {breakdown.map((item) => {
+              const percent =
+                grandTotal > 0 ? (item.total / grandTotal) * 100 : 0;
+              return (
+                <View key={item.key} style={styles.riskRow}>
+                  <View style={styles.riskRowHeader}>
+                    <View style={styles.riskLabelGroup}>
+                      <View
+                        style={[styles.riskDot, { backgroundColor: item.color }]}
+                      />
+                      <Text style={styles.riskLabel}>{item.label}</Text>
+                    </View>
+                    <Text style={styles.riskCount}>
+                      {formatCount(item.total)}
+                    </Text>
+                  </View>
+                  <View style={styles.riskBarTrack}>
+                    <View
+                      style={[
+                        styles.riskBarFill,
+                        { width: `${percent}%`, backgroundColor: item.color },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.riskPercent}>{percent.toFixed(1)}%</Text>
+                </View>
+              );
+            })}
+
+            <View style={styles.totalDivider} />
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalValue}>{formatCount(grandTotal)}</Text>
+            </View>
+          </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -455,7 +326,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
-    gap: Spacing.two,
   },
   dateRangeRow: {
     flexDirection: "row",
@@ -505,63 +375,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
-  },
-  summaryCard: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: Spacing.four,
-    marginTop: Spacing.three,
-    marginBottom: Spacing.two,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.two,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  summaryLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#6B7280",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  summaryDivider: {
-    width: 1,
-    backgroundColor: "#F3F4F6",
-    marginVertical: 4,
-  },
-  amountFilterSection: {
-    gap: Spacing.two,
-  },
-  amountFilterHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  amountFilterLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#6B7280",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-  amountFilterValue: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#111827",
   },
   modalOverlay: {
     flex: 1,
@@ -631,64 +444,86 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: Spacing.four,
   },
-  emptyText: {
-    color: "#6B7280",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  emptySubtext: {
-    color: "#9CA3AF",
-    fontSize: 13,
-  },
   listContent: {
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.two,
+    paddingTop: Spacing.three,
     paddingBottom: Spacing.six,
-    gap: Spacing.two,
   },
-  currencyCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.three,
+  riskCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    padding: Spacing.three,
+    padding: Spacing.four,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  badgeCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#EEF2FF",
+  riskRow: {
+    marginBottom: Spacing.four,
+  },
+  riskRowHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.two,
   },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6366F1",
+  riskLabelGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.two,
   },
-  currencyInfo: {
-    flex: 1,
+  riskDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  currencyAmount: {
+  riskLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  riskCount: {
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
   },
-  currencyRM: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: BRAND_COLOR,
-    marginTop: 2,
+  riskBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F3F4F6",
+    overflow: "hidden",
   },
-  currencySubtext: {
+  riskBarFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  riskPercent: {
     fontSize: 12,
+    fontWeight: "500",
     color: "#6B7280",
-    marginTop: 2,
+    marginTop: 4,
+  },
+  totalDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginBottom: Spacing.three,
+  },
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  totalLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  totalValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: BRAND_COLOR,
   },
 });

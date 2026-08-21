@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Drawer } from "expo-router/drawer";
+import { useState } from "react";
 import {
   Dimensions,
   Pressable,
@@ -17,18 +18,14 @@ import { useTheme } from "@/hooks/use-theme";
 const BRAND_COLOR = "#208AEF";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
-const MENU_ITEMS: {
+type MenuItem = {
   name: string;
   title: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   activeIcon?: React.ComponentProps<typeof Ionicons>["name"];
-}[] = [
-  {
-    name: "dashboard",
-    title: "Dashboard",
-    icon: "home-outline",
-    activeIcon: "home",
-  },
+};
+
+const REPORT_ITEMS: MenuItem[] = [
   {
     name: "purchasing",
     title: "Purchasing",
@@ -66,17 +63,79 @@ const MENU_ITEMS: {
     activeIcon: "swap-horizontal",
   },
   {
-    name: "setting",
-    title: "Setting",
-    icon: "settings-outline",
-    activeIcon: "settings",
+    name: "risk",
+    title: "Data Risk",
+    icon: "warning-outline",
+    activeIcon: "warning",
   },
+];
+
+const DASHBOARD_ITEM: MenuItem = {
+  name: "dashboard",
+  title: "Dashboard",
+  icon: "home-outline",
+  activeIcon: "home",
+};
+
+const SETTING_ITEM: MenuItem = {
+  name: "setting",
+  title: "Setting",
+  icon: "settings-outline",
+  activeIcon: "settings",
+};
+
+const ALL_ROUTES: MenuItem[] = [
+  DASHBOARD_ITEM,
+  ...REPORT_ITEMS,
+  SETTING_ITEM,
 ];
 
 function CustomDrawerContent({ navigation, state, ...props }: any) {
   const { logout } = useAuth();
   const theme = useTheme();
   const activeRoute = state?.routes[state.index]?.name;
+  const isReportActive = REPORT_ITEMS.some((item) => item.name === activeRoute);
+
+  const [reportExpanded, setReportExpanded] = useState(isReportActive);
+  if (isReportActive && !reportExpanded) {
+    setReportExpanded(true);
+  }
+
+  function renderMenuItem(item: MenuItem, sub?: boolean) {
+    const isActive = activeRoute === item.name;
+    return (
+      <Pressable
+        key={item.name}
+        onPress={() => navigation.navigate(item.name)}
+        style={({ pressed }) => [
+          styles.menuItem,
+          sub && styles.subMenuItem,
+          isActive && styles.activeMenuItem,
+          isActive && { backgroundColor: BRAND_COLOR },
+          pressed && styles.menuItemPressed,
+        ]}
+      >
+        <View style={styles.menuItemContent}>
+          <View style={[styles.iconContainer, sub && styles.subIconContainer]}>
+            <Ionicons
+              name={isActive ? item.activeIcon || item.icon : item.icon}
+              color={isActive ? "#FFFFFF" : theme.textSecondary}
+              size={sub ? 20 : 24}
+            />
+          </View>
+          <ThemedText
+            style={[
+              styles.menuLabel,
+              isActive && styles.activeMenuLabel,
+              { color: isActive ? "#FFFFFF" : theme.text },
+            ]}
+          >
+            {item.title}
+          </ThemedText>
+        </View>
+      </Pressable>
+    );
+  }
 
   return (
     <SafeAreaView
@@ -111,40 +170,48 @@ function CustomDrawerContent({ navigation, state, ...props }: any) {
         contentContainerStyle={styles.menuSectionContent}
         showsVerticalScrollIndicator={false}
       >
-        {MENU_ITEMS.map((item) => {
-          const isActive = activeRoute === item.name;
-          return (
-            <Pressable
-              key={item.name}
-              onPress={() => navigation.navigate(item.name)}
-              style={({ pressed }) => [
-                styles.menuItem,
-                isActive && styles.activeMenuItem,
-                isActive && { backgroundColor: BRAND_COLOR },
-                pressed && styles.menuItemPressed,
-              ]}
-            >
-              <View style={styles.menuItemContent}>
-                <View style={styles.iconContainer}>
-                  <Ionicons
-                    name={isActive ? item.activeIcon || item.icon : item.icon}
-                    color={isActive ? "#FFFFFF" : theme.textSecondary}
-                    size={24}
-                  />
-                </View>
-                <ThemedText
-                  style={[
-                    styles.menuLabel,
-                    isActive && styles.activeMenuLabel,
-                    { color: isActive ? "#FFFFFF" : theme.text },
-                  ]}
-                >
-                  {item.title}
-                </ThemedText>
+        {renderMenuItem(DASHBOARD_ITEM)}
+
+        <Pressable
+          onPress={() => setReportExpanded((prev) => !prev)}
+          style={({ pressed }) => [
+            styles.menuItem,
+            pressed && styles.menuItemPressed,
+          ]}
+        >
+          <View style={styles.reportHeaderContent}>
+            <View style={styles.menuItemContent}>
+              <View style={styles.iconContainer}>
+                <Ionicons
+                  name="document-text-outline"
+                  color={isReportActive ? BRAND_COLOR : theme.textSecondary}
+                  size={24}
+                />
               </View>
-            </Pressable>
-          );
-        })}
+              <ThemedText
+                style={[
+                  styles.menuLabel,
+                  isReportActive && { color: BRAND_COLOR, fontWeight: "600" },
+                ]}
+              >
+                Report
+              </ThemedText>
+            </View>
+            <Ionicons
+              name={reportExpanded ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={theme.textSecondary}
+            />
+          </View>
+        </Pressable>
+
+        {reportExpanded && (
+          <View style={styles.subMenuList}>
+            {REPORT_ITEMS.map((item) => renderMenuItem(item, true))}
+          </View>
+        )}
+
+        {renderMenuItem(SETTING_ITEM)}
       </ScrollView>
 
       {/* Footer Section */}
@@ -215,7 +282,7 @@ export default function AppLayout() {
         overlayColor: "rgba(0,0,0,0.4)",
       }}
     >
-      {MENU_ITEMS.map((item) => (
+      {ALL_ROUTES.map((item) => (
         <Drawer.Screen
           key={item.name}
           name={item.name}
@@ -300,6 +367,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  reportHeaderContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  subMenuList: {
+    marginLeft: 20,
+  },
+  subMenuItem: {
+    marginVertical: 1,
+    paddingVertical: 6,
+  },
   activeMenuItem: {
     shadowColor: BRAND_COLOR,
     shadowOffset: { width: 0, height: 4 },
@@ -313,6 +392,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+  },
+  subIconContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
   },
   menuLabel: {
     fontSize: 15,

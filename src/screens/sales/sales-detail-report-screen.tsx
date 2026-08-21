@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,6 +17,8 @@ import {
 } from "react-native";
 
 import { AccessDeniedView } from "@/components/access-denied-view";
+import { AmountRangeInputs } from "@/components/amount-range-inputs";
+import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
 import {
@@ -49,29 +51,51 @@ function formatAmount(value: number): string {
   });
 }
 
+function parseAmountLow(text: string): number {
+  const value = Number(text.trim());
+  return text.trim() !== "" && Number.isFinite(value) ? value : 0;
+}
+
+function parseAmountHigh(text: string): number {
+  const value = Number(text.trim());
+  return text.trim() !== "" && Number.isFinite(value) ? value : Infinity;
+}
+
 type ActivePicker = "from" | "to" | null;
 
 type Props = {
-  initialDate?: string;
+  initialFromDate?: string;
+  initialToDate?: string;
 };
 
-export function SalesDetailReportScreen({ initialDate }: Props) {
+export function SalesDetailReportScreen({
+  initialFromDate,
+  initialToDate,
+}: Props) {
   const router = useRouter();
-  const { loading: permissionLoading, access } = usePageAccess([
-    "SalesDetail",
-  ]);
+  const { loading: permissionLoading, access } = usePageAccess(["SalesDetail"]);
 
   const [fromDate, setFromDate] = useState(() =>
-    initialDate ? parseDateParam(initialDate) : startOfDay(new Date()),
+    initialFromDate ? parseDateParam(initialFromDate) : startOfDay(new Date()),
   );
   const [toDate, setToDate] = useState(() =>
-    initialDate ? parseDateParam(initialDate) : startOfDay(new Date()),
+    initialToDate ? parseDateParam(initialToDate) : startOfDay(new Date()),
   );
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
+  const [filtersExpanded, setFiltersExpanded] = useState(true);
 
-  const [appliedFilters, setAppliedFilters] = useState({ fromDate, toDate });
+  const [appliedFilters, setAppliedFilters] = useState({
+    fromDate,
+    toDate,
+    amountLow: 0,
+    amountHigh: Infinity,
+  });
 
   const [groups, setGroups] = useState<PurchaseSalesGroup[]>([]);
+  // Draft amount inputs the user is editing; only take effect once committed
+  // into appliedFilters via the Search button, same as dates.
+  const [amountLowText, setAmountLowText] = useState("");
+  const [amountHighText, setAmountHighText] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -80,9 +104,10 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
     setErrorMessage(null);
     try {
       const data = await fetchPurchaseSales(from, to, "S");
-      setGroups(
-        data.filter((group) => group.currency && group.currency !== "0"),
+      const filtered = data.filter(
+        (group) => group.currency && group.currency !== "0",
       );
+      setGroups(filtered);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to load report",
@@ -106,16 +131,49 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
   }, [appliedFilters, loadReport]);
 
   function applyFilters() {
-    setAppliedFilters({ fromDate, toDate });
+    setAppliedFilters({
+      fromDate,
+      toDate,
+      amountLow: parseAmountLow(amountLowText),
+      amountHigh: parseAmountHigh(amountHighText),
+    });
+    setFiltersExpanded(false);
   }
 
-  const [appliedInitialDate, setAppliedInitialDate] = useState(initialDate);
-  if (initialDate && initialDate !== appliedInitialDate) {
-    setAppliedInitialDate(initialDate);
-    const date = parseDateParam(initialDate);
-    setFromDate(date);
-    setToDate(date);
-    setAppliedFilters({ fromDate: date, toDate: date });
+  // Clear the amount filter every time this screen is entered/refocused, so
+  // a filter picked on a previous visit doesn't silently carry over.
+  useFocusEffect(
+    useCallback(() => {
+      setAmountLowText("");
+      setAmountHighText("");
+      setAppliedFilters((prev) => ({
+        ...prev,
+        amountLow: 0,
+        amountHigh: Infinity,
+      }));
+    }, []),
+  );
+
+  const incomingRangeKey =
+    initialFromDate && initialToDate
+      ? `${initialFromDate}|${initialToDate}`
+      : undefined;
+  const [appliedRangeKey, setAppliedRangeKey] = useState(incomingRangeKey);
+  if (incomingRangeKey && incomingRangeKey !== appliedRangeKey) {
+    setAppliedRangeKey(incomingRangeKey);
+    const from = parseDateParam(initialFromDate!);
+    const to = parseDateParam(initialToDate!);
+    setFromDate(from);
+    setToDate(to);
+    setAmountLowText("");
+    setAmountHighText("");
+    setAppliedFilters({
+      fromDate: from,
+      toDate: to,
+      amountLow: 0,
+      amountHigh: Infinity,
+    });
+    setFiltersExpanded(false);
   }
 
   function handleValueChange(
@@ -149,11 +207,17 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
     });
   }
 
-  const totalTransactions = groups.reduce(
+  const visibleGroups = groups.filter(
+    (group) =>
+      group.totalFCAmountRM >= appliedFilters.amountLow &&
+      group.totalFCAmountRM <= appliedFilters.amountHigh,
+  );
+
+  const totalTransactions = visibleGroups.reduce(
     (sum, group) => sum + group.items.length,
     0,
   );
-  const totalRM = groups.reduce(
+  const totalRM = visibleGroups.reduce(
     (sum, group) =>
       sum + group.items.reduce((itemSum, item) => itemSum + item.rm, 0),
     0,
@@ -176,48 +240,68 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.headerSection}>
-        <View style={styles.dateRangeRow}>
-          <Pressable
-            onPress={() => setActivePicker("from")}
-            style={({ pressed }) => [
-              styles.dateSelector,
-              pressed && styles.dateSelectorPressed,
-            ]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
-            <View>
-              <Text style={styles.dateSelectorLabel}>From</Text>
-              <Text style={styles.dateText}>{formatDisplayDate(fromDate)}</Text>
-            </View>
-          </Pressable>
-
-          <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
-
-          <Pressable
-            onPress={() => setActivePicker("to")}
-            style={({ pressed }) => [
-              styles.dateSelector,
-              pressed && styles.dateSelectorPressed,
-            ]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
-            <View>
-              <Text style={styles.dateSelectorLabel}>To</Text>
-              <Text style={styles.dateText}>{formatDisplayDate(toDate)}</Text>
-            </View>
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={applyFilters}
-          style={({ pressed }) => [
-            styles.searchButton,
-            pressed && styles.searchButtonPressed,
-          ]}
+        <CollapsibleFilterSection
+          expanded={filtersExpanded}
+          onToggle={() => setFiltersExpanded((prev) => !prev)}
+          summary={`${formatDisplayDate(appliedFilters.fromDate)} – ${formatDisplayDate(appliedFilters.toDate)}`}
+          activeColor={BRAND_COLOR}
         >
-          <Ionicons name="search" size={16} color="#FFFFFF" />
-          <Text style={styles.searchButtonText}>Search</Text>
-        </Pressable>
+          <View style={styles.dateRangeRow}>
+            <Pressable
+              onPress={() => setActivePicker("from")}
+              style={({ pressed }) => [
+                styles.dateSelector,
+                pressed && styles.dateSelectorPressed,
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
+              <View>
+                <Text style={styles.dateSelectorLabel}>From</Text>
+                <Text style={styles.dateText}>
+                  {formatDisplayDate(fromDate)}
+                </Text>
+              </View>
+            </Pressable>
+
+            <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
+
+            <Pressable
+              onPress={() => setActivePicker("to")}
+              style={({ pressed }) => [
+                styles.dateSelector,
+                pressed && styles.dateSelectorPressed,
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={18} color={BRAND_COLOR} />
+              <View>
+                <Text style={styles.dateSelectorLabel}>To</Text>
+                <Text style={styles.dateText}>{formatDisplayDate(toDate)}</Text>
+              </View>
+            </Pressable>
+          </View>
+
+          <View style={styles.amountFilterSection}>
+            <Text style={styles.amountFilterLabel}>Amount Range (RM)</Text>
+            <AmountRangeInputs
+              lowText={amountLowText}
+              highText={amountHighText}
+              onLowChange={setAmountLowText}
+              onHighChange={setAmountHighText}
+              activeColor={BRAND_COLOR}
+            />
+          </View>
+
+          <Pressable
+            onPress={applyFilters}
+            style={({ pressed }) => [
+              styles.searchButton,
+              pressed && styles.searchButtonPressed,
+            ]}
+          >
+            <Ionicons name="search" size={16} color="#FFFFFF" />
+            <Text style={styles.searchButtonText}>Search</Text>
+          </Pressable>
+        </CollapsibleFilterSection>
       </View>
 
       {!loading && !errorMessage && groups.length > 0 && (
@@ -228,7 +312,7 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total RM</Text>
+            <Text style={styles.summaryLabel}>Total RM (Amount)</Text>
             <Text style={styles.summaryValue}>RM {formatAmount(totalRM)}</Text>
           </View>
         </View>
@@ -299,7 +383,7 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
         </View>
       ) : (
         <FlatList
-          data={groups}
+          data={visibleGroups}
           keyExtractor={(group) => group.currency}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -314,7 +398,11 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
             <View style={styles.centerContent}>
               <Ionicons name="trending-up-outline" size={48} color="#D1D5DB" />
               <Text style={styles.emptyText}>No sales found</Text>
-              <Text style={styles.emptySubtext}>for this date range</Text>
+              <Text style={styles.emptySubtext}>
+                {groups.length > 0
+                  ? "for this amount range"
+                  : "for this date range"}
+              </Text>
             </View>
           }
           renderItem={({ item: group }) => (
@@ -331,6 +419,9 @@ export function SalesDetailReportScreen({ initialDate }: Props) {
               <View style={styles.currencyInfo}>
                 <Text style={styles.currencyAmount}>
                   {group.currency.trim()} {formatAmount(group.totalFCAmount)}
+                </Text>
+                <Text style={styles.currencyRM}>
+                  ≈ RM {formatAmount(group.totalFCAmountRM)}
                 </Text>
                 <Text style={styles.currencySubtext}>
                   {group.items.length} transaction
@@ -450,6 +541,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     marginVertical: 4,
   },
+  amountFilterSection: {
+    gap: Spacing.two,
+  },
+  amountFilterHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  amountFilterLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  amountFilterValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#111827",
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -566,6 +677,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
+  },
+  currencyRM: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: BRAND_COLOR,
+    marginTop: 2,
   },
   currencySubtext: {
     fontSize: 12,
