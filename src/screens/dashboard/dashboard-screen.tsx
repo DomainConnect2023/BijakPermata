@@ -25,7 +25,7 @@ import {
   fetchDashboardByMonth,
   fetchDashboardByYear,
 } from "@/services/dashboard-api";
-import { formatDateParam } from "@/services/report-api";
+import { type DataRiskType, formatDateParam } from "@/services/report-api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const BRAND_COLOR = "#208AEF";
@@ -89,6 +89,13 @@ function assignCurrencyColors(labels: string[]): Record<string, string> {
 
   return assignments;
 }
+
+const RISK_TYPES: { key: DataRiskType; label: string; color: string }[] = [
+  { key: "LOW", label: "Low Risk", color: "#22C55E" },
+  { key: "MED", label: "Medium Risk", color: "#F59E0B" },
+  { key: "AVE", label: "Average Risk", color: "#3B82F6" },
+  { key: "HIGH", label: "High Risk", color: "#EF4444" },
+];
 
 function formatDisplayDate(date: Date): string {
   return date.toLocaleDateString("en-GB", {
@@ -288,7 +295,8 @@ export function DashboardScreen() {
   }, [activeTab, dailyDate, monthYear, year, loadDashboard]);
 
   function getDrillDownRange(): { from: Date; to: Date } {
-    if (activeTab === "monthly") return getMonthRange(monthYear.year, monthYear.month);
+    if (activeTab === "monthly")
+      return getMonthRange(monthYear.year, monthYear.month);
     if (activeTab === "yearly") return getYearRange(year);
     return { from: dailyDate, to: dailyDate };
   }
@@ -321,6 +329,14 @@ export function DashboardScreen() {
     const { from, to } = getDrillDownRange();
     router.push({
       pathname: "/margin",
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
+    });
+  }
+
+  function goToDataRisk() {
+    const { from, to } = getDrillDownRange();
+    router.push({
+      pathname: "/risk",
       params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
     });
   }
@@ -398,6 +414,15 @@ export function DashboardScreen() {
       : activeTab === "monthly"
         ? formatMonthTrendLabel
         : (label: string) => label;
+
+  // Always show all four risk buckets, defaulting missing ones to zero —
+  // the API only returns entries that have data for the selected range.
+  const dataRiskChart = dashboard?.dataRiskChart ?? [];
+  const riskBreakdown = RISK_TYPES.map((meta) => {
+    const found = dataRiskChart.find((item) => item.riskType === meta.key);
+    return { ...meta, total: found?.total ?? 0 };
+  });
+  const riskTotal = riskBreakdown.reduce((sum, item) => sum + item.total, 0);
 
   return (
     <View style={styles.container}>
@@ -682,7 +707,7 @@ export function DashboardScreen() {
               icon="swap-horizontal-outline"
               iconColor={BRAND_COLOR}
               iconBackground={`${BRAND_COLOR}15`}
-              label="Transactions"
+              label="Total Transactions"
               value={formatCount(dashboard?.transactionCount ?? 0)}
               onPress={goToTransactions}
             />
@@ -868,6 +893,49 @@ export function DashboardScreen() {
               </View>
             )}
           </View>
+
+          <Pressable
+            onPress={goToDataRisk}
+            style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>Data Risk</Text>
+              <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+            </View>
+            {riskBreakdown.map((item) => {
+              const percent =
+                riskTotal > 0 ? (item.total / riskTotal) * 100 : 0;
+              return (
+                <View key={item.key} style={styles.riskRow}>
+                  <View style={styles.riskRowHeader}>
+                    <View style={styles.riskLabelGroup}>
+                      <View
+                        style={[styles.riskDot, { backgroundColor: item.color }]}
+                      />
+                      <Text style={styles.riskLabel}>{item.label}</Text>
+                    </View>
+                    <Text style={styles.riskCount}>
+                      {formatCount(item.total)}
+                    </Text>
+                  </View>
+                  <View style={styles.riskBarTrack}>
+                    <View
+                      style={[
+                        styles.riskBarFill,
+                        { width: `${percent}%`, backgroundColor: item.color },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.riskPercent}>{percent.toFixed(1)}%</Text>
+                </View>
+              );
+            })}
+            <View style={styles.totalDivider} />
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalValue}>{formatCount(riskTotal)}</Text>
+            </View>
+          </Pressable>
         </ScrollView>
       )}
     </View>
@@ -1128,6 +1196,78 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
     marginBottom: Spacing.three,
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  riskRow: {
+    marginBottom: Spacing.three,
+  },
+  riskRowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.two,
+  },
+  riskLabelGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.two,
+  },
+  riskDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  riskLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  riskCount: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  riskBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F3F4F6",
+    overflow: "hidden",
+  },
+  riskBarFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  riskPercent: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#6B7280",
+    marginTop: 4,
+  },
+  totalDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginBottom: Spacing.three,
+  },
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  totalLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: BRAND_COLOR,
   },
   donutSection: {
     alignItems: "center",

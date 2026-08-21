@@ -1,5 +1,5 @@
 import { apiGet } from "@/services/api-client";
-import { formatDateParam } from "@/services/report-api";
+import { type DataRiskItem, formatDateParam } from "@/services/report-api";
 
 export type BalanceChartItem = {
   label: string;
@@ -19,6 +19,7 @@ export type DashboardData = {
   transactionCount: number;
   balanceChart: BalanceChartItem[];
   profitChart: ProfitChartItem[];
+  dataRiskChart: DataRiskItem[];
 };
 
 export async function fetchDashboard(date: Date): Promise<DashboardData> {

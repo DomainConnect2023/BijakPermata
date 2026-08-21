@@ -173,17 +173,17 @@ export function MarginReportScreen({
     setActivePicker(null);
   }
 
-  const totalProfit = items.reduce((sum, item) => sum + item.profit, 0);
+  const totalProfit = items.reduce((sum, item) => sum + item.balanceRM, 0);
 
   const breakdown = useMemo(() => {
-    const profitable = items
-      .filter((item) => item.profit > 0)
-      .sort((a, b) => b.profit - a.profit);
-    const top = profitable.slice(0, 3);
-    const otherTotal = profitable
+    const positive = items
+      .filter((item) => item.balanceRM > 0)
+      .sort((a, b) => b.balanceRM - a.balanceRM);
+    const top = positive.slice(0, 3);
+    const otherTotal = positive
       .slice(3)
-      .reduce((sum, item) => sum + item.profit, 0);
-    const total = profitable.reduce((sum, item) => sum + item.profit, 0);
+      .reduce((sum, item) => sum + item.balanceRM, 0);
+    const total = positive.reduce((sum, item) => sum + item.balanceRM, 0);
     return { top, otherTotal, total };
   }, [items]);
 
@@ -209,7 +209,7 @@ export function MarginReportScreen({
   const renderMarginItem = ({ item }: { item: MarginProfitItem }) => {
     const expanded = expandedCurrencies.has(item.currency);
     const percentOfTotal =
-      totalProfit !== 0 ? (item.profit / totalProfit) * 100 : 0;
+      totalProfit !== 0 ? (item.balanceRM / totalProfit) * 100 : 0;
 
     return (
       <Pressable
@@ -224,10 +224,10 @@ export function MarginReportScreen({
             <Text
               style={[
                 styles.headerAmount,
-                item.profit < 0 && styles.profitNegative,
+                item.balanceRM < 0 && styles.profitNegative,
               ]}
             >
-              RM {formatAmount(item.profit)}
+              RM {formatAmount(item.balanceRM)}
             </Text>
             <Text style={styles.headerPercent}>
               {percentOfTotal.toFixed(1)}% of Total
@@ -253,6 +253,17 @@ export function MarginReportScreen({
                 item.balanceRM,
                 item.currency,
               )}
+              <View style={styles.statBlock}>
+                <Text style={styles.statBlockLabel}>Profit</Text>
+                <Text
+                  style={[
+                    styles.statBlockAmountRM,
+                    item.profit < 0 && styles.profitNegative,
+                  ]}
+                >
+                  RM {formatAmount(item.profit)}
+                </Text>
+              </View>
             </View>
           </>
         )}
@@ -348,7 +359,7 @@ export function MarginReportScreen({
 
       {!loading && !errorMessage && breakdown.total > 0 && (
         <View style={styles.breakdownCard}>
-          <Text style={styles.breakdownTitle}>Top Currencies by Profit</Text>
+          <Text style={styles.breakdownTitle}>Top Currencies by Balance</Text>
           <View style={styles.breakdownBar}>
             {breakdown.top.map((item, index) => (
               <View
@@ -356,7 +367,7 @@ export function MarginReportScreen({
                 style={[
                   styles.breakdownSegment,
                   {
-                    flex: item.profit,
+                    flex: item.balanceRM,
                     backgroundColor: BREAKDOWN_COLORS[index],
                   },
                 ]}
@@ -386,7 +397,7 @@ export function MarginReportScreen({
                 />
                 <Text style={styles.legendLabel}>{item.currency}</Text>
                 <Text style={styles.legendPercent}>
-                  {((item.profit / breakdown.total) * 100).toFixed(1)}%
+                  {((item.balanceRM / breakdown.total) * 100).toFixed(1)}%
                 </Text>
               </View>
             ))}
