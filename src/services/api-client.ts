@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 const IP_LOOKUP_URL = "https://domainmobile.domainsb.com.my/Api/GetIP";
 const PACKAGE_NAME = "com.bijakpermata";
 const SECURE_STORE_KEY = "ServerIP";
+const FALLBACK_BASE_URL = "https://bijakpermatadev.domainsb.com.my";
 
 let cachedIpAddress: string | null = null;
 
@@ -32,15 +33,14 @@ export async function getIPAddress(): Promise<string> {
     cachedIpAddress = data.ipAddress;
     await SecureStore.setItemAsync(SECURE_STORE_KEY, data.ipAddress);
     return data.ipAddress;
-  } catch (error) {
+  } catch {
     const stored = await SecureStore.getItemAsync(SECURE_STORE_KEY);
     if (stored) {
       cachedIpAddress = stored;
       return stored;
     }
-    throw error instanceof Error
-      ? error
-      : new Error("Unable to resolve server address");
+    cachedIpAddress = FALLBACK_BASE_URL;
+    return FALLBACK_BASE_URL;
   }
 }
 

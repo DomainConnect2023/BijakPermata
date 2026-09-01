@@ -38,6 +38,7 @@ export default function LoginScreen() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
+
     try {
       await login(usercode, password);
     } catch (e) {
