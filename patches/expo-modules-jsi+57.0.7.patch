@@ -1,0 +1,39 @@
+diff --git a/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h b/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h
+index 6115e87..e083fea 100644
+--- a/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h
++++ b/node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h
+@@ -5,6 +5,16 @@
+ #include <atomic>
+ #include <swift/bridging>
+ 
++namespace expo {
++class RuntimeScheduler;
++} // namespace expo
++
++/** Retains the RuntimeScheduler, called by Swift's ARC. */
++void retainRuntimeScheduler(expo::RuntimeScheduler *scheduler);
++
++/** Releases the RuntimeScheduler, called by Swift's ARC. Deallocates when the ref count reaches zero. */
++void releaseRuntimeScheduler(expo::RuntimeScheduler *scheduler);
++
+ namespace expo {
+ 
+ /**
+@@ -50,7 +60,7 @@ public:
+    `scheduleTask` dispatches through `fn`, which the host implements against
+    the real react::RuntimeScheduler.
+    */
+-  SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept
++  RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept
+       : nativeScheduler(scheduler), scheduleFn(fn) {}
+ 
+   /**
+@@ -58,7 +68,7 @@ public:
+    caller's thread — intended for standalone runtimes (e.g. tests) that have
+    no React scheduler.
+    */
+-  SWIFT_RETURNS_RETAINED RuntimeScheduler() {}
++  RuntimeScheduler() {}
+ 
+   RuntimeScheduler(const RuntimeScheduler &) = delete;
+ 
