@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { AccessDeniedView } from "@/components/access-denied-view";
+import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
@@ -508,6 +509,8 @@ export function MarginReportScreen({ initialFromDate, initialToDate }: Props) {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <BottomActionNav />
     </View>
   );
 }

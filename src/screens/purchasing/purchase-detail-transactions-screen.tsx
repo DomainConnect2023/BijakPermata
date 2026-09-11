@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { AccessDeniedView } from "@/components/access-denied-view";
+import { BottomActionNav } from "@/components/bottom-action-nav";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
 import {
@@ -235,6 +236,8 @@ export function PurchaseDetailTransactionsScreen({
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <BottomActionNav />
     </View>
   );
 }

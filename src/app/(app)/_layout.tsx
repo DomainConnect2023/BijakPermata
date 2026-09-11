@@ -12,63 +12,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
+import { REPORT_ITEMS, type ReportMenuItem } from "@/constants/report-items";
 import { useAuth } from "@/contexts/auth-context";
 import { useTheme } from "@/hooks/use-theme";
 
 const BRAND_COLOR = "#208AEF";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
-type MenuItem = {
-  name: string;
-  title: string;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  activeIcon?: React.ComponentProps<typeof Ionicons>["name"];
-};
-
-const REPORT_ITEMS: MenuItem[] = [
-  {
-    name: "purchasing",
-    title: "Purchasing",
-    icon: "cart-outline",
-    activeIcon: "cart",
-  },
-  {
-    name: "sales",
-    title: "Sales",
-    icon: "trending-up-outline",
-    activeIcon: "trending-up",
-  },
-  {
-    name: "margin",
-    title: "Margin",
-    icon: "analytics-outline",
-    activeIcon: "analytics",
-  },
-  {
-    name: "daily",
-    title: "Daily",
-    icon: "calendar-outline",
-    activeIcon: "calendar",
-  },
-  {
-    name: "finance",
-    title: "Finance",
-    icon: "wallet-outline",
-    activeIcon: "wallet",
-  },
-  {
-    name: "transaction",
-    title: "Transaction",
-    icon: "swap-horizontal-outline",
-    activeIcon: "swap-horizontal",
-  },
-  {
-    name: "risk",
-    title: "Data Risk",
-    icon: "warning-outline",
-    activeIcon: "warning",
-  },
-];
+type MenuItem = ReportMenuItem;
 
 const DASHBOARD_ITEM: MenuItem = {
   name: "dashboard",
@@ -246,6 +197,12 @@ export default function AppLayout() {
   return (
     <Drawer
       initialRouteName="dashboard"
+      // Default is "firstRoute", which makes GO_BACK always jump to
+      // "dashboard" (the first drawer route) no matter where you came
+      // from. "history" makes Back respect the actual order sections were
+      // visited in, so the Back button in BottomActionNav returns to the
+      // real previous screen instead of hardcoding to the dashboard.
+      backBehavior="history"
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
         headerTintColor: theme.text,

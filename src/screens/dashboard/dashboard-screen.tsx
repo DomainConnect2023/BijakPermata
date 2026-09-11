@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { LineChart, PieChart } from "react-native-gifted-charts";
 
+import { BottomActionNav } from "@/components/bottom-action-nav";
 import { Spacing } from "@/constants/theme";
 import {
   type BalanceChartItem,
@@ -31,9 +32,29 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const BRAND_COLOR = "#208AEF";
 const SUCCESS_COLOR = "#22C55E";
 const ERROR_COLOR = "#EF4444";
-const OTHER_COLOR = "#9CA3AF";
+// Pale slate blue-gray — cleaner/lighter than a flat gray and than the
+// warm taupe tried before, but still deliberately desaturated so "Other"
+// reads as a neutral catch-all, not a real currency competing with the
+// candy palette.
+const OTHER_COLOR = "#C4C9D4";
+// Same family as BRAND_COLOR (both cool blues) but a distinct shade, so the
+// Total Transactions tile icon doesn't look identical to every other
+// brand-blue icon on the dashboard.
+const TRANSACTIONS_ICON_COLOR = "#6366F1";
 
 type DashboardTab = "daily" | "monthly" | "yearly";
+
+type CustomerTransactionType = "ALL" | "NEW" | "EXISTING";
+
+const CUSTOMER_TYPE_OPTIONS: {
+  value: CustomerTransactionType;
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+}[] = [
+  { value: "ALL", label: "All Customers", icon: "people-outline" },
+  { value: "NEW", label: "New Customers", icon: "person-add-outline" },
+  { value: "EXISTING", label: "Existing Customers", icon: "person-outline" },
+];
 
 const TAB_OPTIONS: { value: DashboardTab; label: string }[] = [
   { value: "daily", label: "Daily" },
@@ -58,27 +79,42 @@ const MONTH_NAMES = [
 
 // Fixed, colorblind-safe categorical order — never cycled. Currencies beyond
 // this count (or an explicit "Other" bucket from the API) fold into the
-// neutral OTHER_COLOR rather than generating/reusing a hue.
+// neutral OTHER_COLOR rather than generating/reusing a hue. A brighter,
+// softer "gelato/candy" set (lighter than a pure-primary rainbow, but not
+// true pastel — a true macaron palette was tried and failed both the
+// lightness band and chroma floor: 6 of 8 slots read as washed-out/grayish
+// on the white card). Slot 4 went through several warm gold/mustard/peach
+// attempts that all read as muddy/unappealing — replaced with a cool
+// periwinkle instead of forcing a warm hue there. Re-validated (worst
+// adjacent CVD ΔE 9.5, normal-vision ΔE 22.1 against the white card
+// surface, both clear of the failure floors); the sub-3:1 contrast entries
+// are covered by the always-visible legend labels.
 const CATEGORICAL_PALETTE = [
-  "#2a78d6",
-  "#eb6834",
-  "#1baf7a",
-  "#eda100",
-  "#e87ba4",
-  "#008300",
-  "#4a3aa7",
-  "#e34948",
+  "#3EB0E8",
+  "#F2872A",
+  "#1FBBA6",
+  "#6C7FE8",
+  "#F368B0",
+  "#3FCB6C",
+  "#9B8AFB",
+  "#FF6F61",
 ];
 
 function assignCurrencyColors(labels: string[]): Record<string, string> {
   const assignments: Record<string, string> = {};
+  // Deliberately NOT alphabetically sorted: `labels` is already in the same
+  // order the donut arcs and legend render in, and the palette's fixed
+  // order was validated for ADJACENT slots specifically so consecutive
+  // colors read as a smooth, distinct sequence. Sorting the codes first
+  // would scramble that — two currencies that end up visually adjacent in
+  // the ring could land on non-adjacent (and visually clashing) slots.
   const distinctCodes = Array.from(
     new Set(
       labels
         .map((label) => label.trim().toUpperCase())
         .filter((code) => code && code !== "OTHER"),
     ),
-  ).sort();
+  );
 
   distinctCodes.forEach((code, index) => {
     assignments[code] =
@@ -248,6 +284,8 @@ export function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [customerTypeModalVisible, setCustomerTypeModalVisible] =
+    useState(false);
 
   const loadDashboard = useCallback(
     async (
@@ -301,12 +339,25 @@ export function DashboardScreen() {
     return { from: dailyDate, to: dailyDate };
   }
 
-  function goToTransactions() {
+  function goToTransactions(customerType: CustomerTransactionType) {
     const { from, to } = getDrillDownRange();
     router.push({
       pathname: "/transaction",
-      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
+      params: {
+        fromDate: formatDateParam(from),
+        toDate: formatDateParam(to),
+        customerType,
+      },
     });
+  }
+
+  function openCustomerTypeModal() {
+    setCustomerTypeModalVisible(true);
+  }
+
+  function selectCustomerType(customerType: CustomerTransactionType) {
+    setCustomerTypeModalVisible(false);
+    goToTransactions(customerType);
   }
 
   function goToSales() {
@@ -408,6 +459,14 @@ export function DashboardScreen() {
       : String(donutData.length);
 
   const grossProfit = dashboard?.totalGrossProfit ?? 0;
+  const newCustomerCount = dashboard?.newCustomerCount ?? 0;
+  // Existing = total customers for the period minus new ones (e.g. 100
+  // total, 10 new -> 90 existing). Clamped to 0 so a stale/missing
+  // totalCustomerCount from the backend never shows a negative number.
+  const existingCustomerCount = Math.max(
+    (dashboard?.totalCustomerCount ?? 0) - newCustomerCount,
+    0,
+  );
   const formatTrendLabel =
     activeTab === "daily"
       ? formatDayLabel
@@ -663,6 +722,66 @@ export function DashboardScreen() {
         </Pressable>
       </Modal>
 
+      <Modal
+        visible={customerTypeModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCustomerTypeModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setCustomerTypeModalVisible(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { paddingBottom: insets.bottom }]}
+            onPress={() => {}}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>View Transactions For</Text>
+              <Pressable onPress={() => setCustomerTypeModalVisible(false)}>
+                <Text style={styles.modalDone}>Close</Text>
+              </Pressable>
+            </View>
+            <View style={styles.customerTypeList}>
+              {/*
+               * TODO(backend): "NEW" / "EXISTING" are passed through as the
+               * `customerType` param but the transaction API has no field or
+               * filter to distinguish new vs existing customers yet — the
+               * detail transaction screen currently shows all transactions
+               * regardless of this selection. Wire this up once the backend
+               * exposes it.
+               */}
+              {CUSTOMER_TYPE_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  onPress={() => selectCustomerType(option.value)}
+                  style={({ pressed }) => [
+                    styles.customerTypeOption,
+                    pressed && styles.customerTypeOptionPressed,
+                  ]}
+                >
+                  <View style={styles.customerTypeOptionLeft}>
+                    <Ionicons
+                      name={option.icon}
+                      size={20}
+                      color={BRAND_COLOR}
+                    />
+                    <Text style={styles.customerTypeOptionText}>
+                      {option.label}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color="#D1D5DB"
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {loading ? (
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={BRAND_COLOR} />
@@ -696,21 +815,81 @@ export function DashboardScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.statGrid}>
-            <StatTile
-              icon="people-outline"
-              iconColor={BRAND_COLOR}
-              iconBackground={`${BRAND_COLOR}15`}
-              label="New Customers"
-              value={formatCount(dashboard?.newCustomerCount ?? 0)}
-            />
-            <StatTile
-              icon="swap-horizontal-outline"
-              iconColor={BRAND_COLOR}
-              iconBackground={`${BRAND_COLOR}15`}
-              label="Total Transactions"
-              value={formatCount(dashboard?.transactionCount ?? 0)}
-              onPress={goToTransactions}
-            />
+            <Pressable
+              onPress={openCustomerTypeModal}
+              style={({ pressed }) => [
+                styles.statTile,
+                styles.statTileWide,
+                pressed && styles.statTilePressed,
+              ]}
+            >
+              <View style={styles.statTileHeader}>
+                <View
+                  style={[
+                    styles.statIconLarge,
+                    { backgroundColor: `${TRANSACTIONS_ICON_COLOR}15` },
+                  ]}
+                >
+                  <Ionicons
+                    name="swap-horizontal-outline"
+                    size={20}
+                    color={TRANSACTIONS_ICON_COLOR}
+                  />
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+              </View>
+
+              <View style={styles.customerTxnRow}>
+                <View style={styles.customerTxnColumnMain}>
+                  <Text style={styles.statLabel}>Total Transactions</Text>
+                  <Text style={styles.statValueLarge}>
+                    {formatCount(dashboard?.transactionCount ?? 0)}
+                  </Text>
+                </View>
+
+                <View style={styles.customerTxnDivider} />
+
+                <View style={styles.customerTxnColumnStacked}>
+                  <View style={styles.customerTxnMiniRow}>
+                    <View style={styles.customerTxnMiniIcon}>
+                      <Ionicons
+                        name="person-add-outline"
+                        size={14}
+                        color={BRAND_COLOR}
+                      />
+                    </View>
+                    <View style={styles.customerTxnMiniText}>
+                      <Text style={styles.customerTxnMiniLabel}>
+                        New Customers
+                      </Text>
+                      <Text style={styles.customerTxnMiniValue}>
+                        {formatCount(newCustomerCount)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.customerTxnMiniDivider} />
+
+                  <View style={styles.customerTxnMiniRow}>
+                    <View style={styles.customerTxnMiniIcon}>
+                      <Ionicons
+                        name="checkmark-done-outline"
+                        size={14}
+                        color={BRAND_COLOR}
+                      />
+                    </View>
+                    <View style={styles.customerTxnMiniText}>
+                      <Text style={styles.customerTxnMiniLabel}>
+                        Existing Customers
+                      </Text>
+                      <Text style={styles.customerTxnMiniValue}>
+                        {formatCount(existingCustomerCount)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </Pressable>
             <StatTile
               icon="trending-up-outline"
               iconColor={SUCCESS_COLOR}
@@ -938,6 +1117,8 @@ export function DashboardScreen() {
           </Pressable>
         </ScrollView>
       )}
+
+      <BottomActionNav />
     </View>
   );
 }
@@ -1179,6 +1360,110 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 16,
     fontWeight: "700",
+    color: "#111827",
+  },
+  statValueLarge: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  statIconLarge: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  customerTxnRow: {
+    flexDirection: "row",
+    marginTop: Spacing.two,
+  },
+  // Total Transactions is the primary thing users check, so it gets the
+  // bigger 6:4 share of the tile with a larger value; New/Existing
+  // Customers sit stacked in the narrower column. minWidth: 0 on both is
+  // required for RN flex children to actually shrink instead of
+  // overflowing the tile when their content is wider than the flex share.
+  customerTxnColumnMain: {
+    flex: 5,
+    minWidth: 0,
+    // Top-aligned (default) so "Total Transactions" starts at the same
+    // height as "New" on the right — centering it made it sit noticeably
+    // lower than the right column's first row.
+    gap: 6,
+  },
+  customerTxnColumnStacked: {
+    flex: 5,
+    minWidth: 0,
+    // Right-side breathing room so the icon/label/value rows don't stretch
+    // flush to the card's right edge — nudges the whole block toward the
+    // center instead of hugging the corner.
+    paddingRight: Spacing.two,
+    justifyContent: "space-between",
+    gap: Spacing.two,
+  },
+  customerTxnMiniRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  customerTxnMiniIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${BRAND_COLOR}15`,
+    flexShrink: 0,
+  },
+  customerTxnMiniText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  customerTxnMiniLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "500",
+    color: "#9CA3AF",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  customerTxnMiniValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  customerTxnMiniDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+  },
+  customerTxnDivider: {
+    width: 1,
+    backgroundColor: "#F3F4F6",
+    marginHorizontal: Spacing.three,
+  },
+  customerTypeList: {
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.four,
+  },
+  customerTypeOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.three,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  customerTypeOptionPressed: {
+    opacity: 0.6,
+  },
+  customerTypeOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.two,
+  },
+  customerTypeOptionText: {
+    fontSize: 15,
+    fontWeight: "500",
     color: "#111827",
   },
   card: {

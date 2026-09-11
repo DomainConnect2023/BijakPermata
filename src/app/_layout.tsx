@@ -47,6 +47,10 @@ function RootNavigator() {
           name="sales-detail-transactions"
           options={{ headerShown: true, title: 'Transactions' }}
         />
+        <Stack.Screen
+          name="report-menu"
+          options={{ headerShown: true, title: 'Reports' }}
+        />
       </Stack.Protected>
       <Stack.Protected guard={!isAuthenticated}>
         <Stack.Screen name="login" />

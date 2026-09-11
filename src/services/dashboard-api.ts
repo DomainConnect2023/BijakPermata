@@ -13,6 +13,13 @@ export type ProfitChartItem = {
 
 export type DashboardData = {
   newCustomerCount: number;
+  // TODO(backend): /Api/Dashboard, /Api/DashboardByMonth and
+  // /Api/DashboardByYear don't return this yet — confirm the field name
+  // with backend and wire it up once it's added. Defaults to 0 until then.
+  // Existing customers is derived on our side as totalCustomerCount minus
+  // newCustomerCount (e.g. 100 total, 10 new -> 90 existing) — see
+  // `existingCustomerCount` in dashboard-screen.tsx.
+  totalCustomerCount?: number;
   totalSalesRM: number;
   totalBuyRM: number;
   totalGrossProfit: number;

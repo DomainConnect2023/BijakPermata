@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 
+import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import {
@@ -311,6 +312,8 @@ export function DataRiskReportScreen({
           </View>
         </ScrollView>
       )}
+
+      <BottomActionNav />
     </View>
   );
 }

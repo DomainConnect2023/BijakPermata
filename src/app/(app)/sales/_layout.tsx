@@ -1,37 +1,12 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router/js-tabs';
+import { Stack } from 'expo-router';
 
-import { useTheme } from '@/hooks/use-theme';
+// The Sales Detail Report / Sale Cancel Report switch used to be a native
+// tab bar here; it's now the 2-box ReportSectionSwitcher on each screen, so
+// this is a plain (invisible) stack instead of a Tabs navigator.
+export const unstable_settings = {
+  initialRouteName: 'sales-detail-report',
+};
 
 export default function SalesLayout() {
-  const theme = useTheme();
-
-  return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.brand,
-        tabBarInactiveTintColor: theme.textSecondary,
-        tabBarStyle: { backgroundColor: theme.background },
-      }}>
-      <Tabs.Screen
-        name="sales-detail-report"
-        options={{
-          title: 'Sales Detail Report',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="sale-cancel-report"
-        options={{
-          title: 'Sale Cancel Report',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="close-circle-outline" color={color} size={size} />
-          ),
-        }}
-      />
-    </Tabs>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

@@ -20,6 +20,7 @@ import {
 
 import { AccessDeniedView } from "@/components/access-denied-view";
 import { AmountRangeInputs } from "@/components/amount-range-inputs";
+import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
@@ -39,6 +40,21 @@ const STATUS_OPTIONS: { value: DetailTransactionStatus; label: string }[] = [
   { value: "B", label: "Buy" },
   { value: "S", label: "Sale" },
 ];
+
+type CustomerTransactionType = "ALL" | "NEW" | "EXISTING";
+
+const CUSTOMER_TYPE_OPTIONS: {
+  value: CustomerTransactionType;
+  label: string;
+}[] = [
+  { value: "ALL", label: "All" },
+  { value: "NEW", label: "New" },
+  { value: "EXISTING", label: "Existing" },
+];
+
+function parseCustomerType(value?: string): CustomerTransactionType {
+  return value === "NEW" || value === "EXISTING" ? value : "ALL";
+}
 
 function startOfDay(date: Date): Date {
   const result = new Date(date);
@@ -100,11 +116,13 @@ type ActivePicker = "from" | "to" | null;
 type Props = {
   initialFromDate?: string;
   initialToDate?: string;
+  initialCustomerType?: string;
 };
 
 export function DetailTransactionReportScreen({
   initialFromDate,
   initialToDate,
+  initialCustomerType,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { loading: permissionLoading, access } = usePageAccess([
@@ -126,6 +144,13 @@ export function DetailTransactionReportScreen({
   const [currencySearch, setCurrencySearch] = useState("");
   const [selectedStatus, setSelectedStatus] =
     useState<DetailTransactionStatus>("ALL");
+  // TODO(backend): the transaction API has no field/filter to distinguish
+  // new vs existing customers yet, so this selection is UI-only for now —
+  // it does not affect which transactions are fetched or shown below.
+  const [selectedCustomerType, setSelectedCustomerType] =
+    useState<CustomerTransactionType>(() =>
+      parseCustomerType(initialCustomerType),
+    );
 
   const [appliedFilters, setAppliedFilters] = useState({
     fromDate,
@@ -240,6 +265,7 @@ export function DetailTransactionReportScreen({
     setToDate(to);
     setSelectedCurrency(null);
     setSelectedStatus("ALL");
+    setSelectedCustomerType(parseCustomerType(initialCustomerType));
     setAmountLowText("");
     setAmountHighText("");
     setAppliedFilters({
@@ -384,6 +410,40 @@ export function DetailTransactionReportScreen({
                 </Pressable>
               );
             })}
+          </View>
+
+          <View style={styles.amountFilterSection}>
+            <Text style={styles.amountFilterLabel}>Customer</Text>
+            <View style={styles.statusRow}>
+              {CUSTOMER_TYPE_OPTIONS.map((option) => {
+                const active = selectedCustomerType === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setSelectedCustomerType(option.value)}
+                    style={[
+                      styles.statusOption,
+                      active && styles.statusOptionActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusOptionText,
+                        active && styles.statusOptionTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {selectedCustomerType !== "ALL" && (
+              <Text style={styles.pendingNote}>
+                Filtering by new/existing customer is not wired up yet —
+                showing all customers for now.
+              </Text>
+            )}
           </View>
 
           <View style={styles.amountFilterSection}>
@@ -673,6 +733,8 @@ export function DetailTransactionReportScreen({
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <BottomActionNav />
     </View>
   );
 }
@@ -837,6 +899,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#111827",
+  },
+  pendingNote: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    fontStyle: "italic",
   },
   modalOverlay: {
     flex: 1,

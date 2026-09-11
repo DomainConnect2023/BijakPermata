@@ -16,7 +16,9 @@ import {
 } from "react-native";
 
 import { AccessDeniedView } from "@/components/access-denied-view";
+import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
+import { ReportSectionSwitcher } from "@/components/report-section-switcher";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
 import {
@@ -25,6 +27,19 @@ import {
 } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
+
+const SWITCHER_OPTIONS = [
+  {
+    label: "Daily Balance Report",
+    route: "/daily/daily-balance-report",
+    icon: "wallet-outline" as const,
+  },
+  {
+    label: "Daily Stock Report",
+    route: "/daily/daily-stock-report",
+    icon: "cube-outline" as const,
+  },
+];
 
 function formatDisplayDate(date: Date): string {
   return date.toLocaleDateString("en-GB", {
@@ -209,6 +224,12 @@ export function DailyBalanceReportScreen() {
         </CollapsibleFilterSection>
       </View>
 
+      <ReportSectionSwitcher
+        label="Report"
+        options={SWITCHER_OPTIONS}
+        activeIndex={0}
+      />
+
       {!loading && !errorMessage && items.length > 0 && (
         <View style={styles.summaryCard}>
           <View style={styles.summaryDivider} />
@@ -308,6 +329,8 @@ export function DailyBalanceReportScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <BottomActionNav />
     </View>
   );
 }

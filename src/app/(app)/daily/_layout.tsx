@@ -1,37 +1,12 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router/js-tabs';
+import { Stack } from 'expo-router';
 
-import { useTheme } from '@/hooks/use-theme';
+// The Daily Balance Report / Daily Stock Report switch used to be a native
+// tab bar here; it's now the ReportSectionSwitcher on each screen, so this
+// is a plain (invisible) stack instead of a Tabs navigator.
+export const unstable_settings = {
+  initialRouteName: 'daily-balance-report',
+};
 
 export default function DailyLayout() {
-  const theme = useTheme();
-
-  return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.brand,
-        tabBarInactiveTintColor: theme.textSecondary,
-        tabBarStyle: { backgroundColor: theme.background },
-      }}>
-      <Tabs.Screen
-        name="daily-balance-report"
-        options={{
-          title: 'Daily Balance Report',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="wallet-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="daily-stock-report"
-        options={{
-          title: 'Daily Stock Report',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cube-outline" color={color} size={size} />
-          ),
-        }}
-      />
-    </Tabs>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

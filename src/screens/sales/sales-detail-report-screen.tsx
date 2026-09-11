@@ -18,7 +18,9 @@ import {
 
 import { AccessDeniedView } from "@/components/access-denied-view";
 import { AmountRangeInputs } from "@/components/amount-range-inputs";
+import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
+import { ReportSectionSwitcher } from "@/components/report-section-switcher";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
 import {
@@ -29,6 +31,19 @@ import {
 } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
+
+const SWITCHER_OPTIONS = [
+  {
+    label: "Sales Detail Report",
+    route: "/sales/sales-detail-report",
+    icon: "document-text-outline" as const,
+  },
+  {
+    label: "Sale Cancel Report",
+    route: "/sales/sale-cancel-report",
+    icon: "close-circle-outline" as const,
+  },
+];
 
 function startOfDay(date: Date): Date {
   const result = new Date(date);
@@ -304,6 +319,12 @@ export function SalesDetailReportScreen({
         </CollapsibleFilterSection>
       </View>
 
+      <ReportSectionSwitcher
+        label="Report"
+        options={SWITCHER_OPTIONS}
+        activeIndex={0}
+      />
+
       {!loading && !errorMessage && groups.length > 0 && (
         <View style={styles.summaryCard}>
           <View style={styles.summaryItem}>
@@ -438,6 +459,8 @@ export function SalesDetailReportScreen({
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <BottomActionNav />
     </View>
   );
 }
