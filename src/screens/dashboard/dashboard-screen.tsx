@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -22,6 +23,7 @@ import { Spacing } from "@/constants/theme";
 import {
   type BalanceChartItem,
   type DashboardData,
+  type ProfitChartItem,
   fetchDashboard,
   fetchDashboardByMonth,
   fetchDashboardByYear,
@@ -41,20 +43,15 @@ const OTHER_COLOR = "#C4C9D4";
 // Total Transactions tile icon doesn't look identical to every other
 // brand-blue icon on the dashboard.
 const TRANSACTIONS_ICON_COLOR = "#6366F1";
+// Profit Comparison bar chart: blue = "now", violet = a reference period —
+// color encodes "which bar is current", not "good vs bad".
+const COMPARISON_NOW_GRADIENT: [string, string] = ["#4DA3F2", "#208AEF"];
+const COMPARISON_REFERENCE_GRADIENT: [string, string] = [
+  "#A78BFA",
+  "#7C5CFC",
+];
 
 type DashboardTab = "daily" | "monthly" | "yearly";
-
-type CustomerTransactionType = "ALL" | "NEW" | "EXISTING";
-
-const CUSTOMER_TYPE_OPTIONS: {
-  value: CustomerTransactionType;
-  label: string;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-}[] = [
-  { value: "ALL", label: "All Customers", icon: "people-outline" },
-  { value: "NEW", label: "New Customers", icon: "person-add-outline" },
-  { value: "EXISTING", label: "Existing Customers", icon: "person-outline" },
-];
 
 const TAB_OPTIONS: { value: DashboardTab; label: string }[] = [
   { value: "daily", label: "Daily" },
@@ -164,7 +161,7 @@ function getYearRange(year: number): { from: Date; to: Date } {
 }
 
 function formatAmount(value: number): string {
-  return value.toLocaleString("en-US", {
+  return (value ?? 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -281,11 +278,14 @@ export function DashboardScreen() {
     number | null
   >(null);
   const [lineChartWidth, setLineChartWidth] = useState(0);
+  // "Profit" = NetProfit (margin - expenses), "Margin" = before expenses —
+  // both come back per-point from the same profitChart series now.
+  const [profitViewMode, setProfitViewMode] = useState<"profit" | "margin">(
+    "profit",
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [customerTypeModalVisible, setCustomerTypeModalVisible] =
-    useState(false);
 
   const loadDashboard = useCallback(
     async (
@@ -339,25 +339,12 @@ export function DashboardScreen() {
     return { from: dailyDate, to: dailyDate };
   }
 
-  function goToTransactions(customerType: CustomerTransactionType) {
+  function goToTransactions() {
     const { from, to } = getDrillDownRange();
     router.push({
       pathname: "/transaction",
-      params: {
-        fromDate: formatDateParam(from),
-        toDate: formatDateParam(to),
-        customerType,
-      },
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
     });
-  }
-
-  function openCustomerTypeModal() {
-    setCustomerTypeModalVisible(true);
-  }
-
-  function selectCustomerType(customerType: CustomerTransactionType) {
-    setCustomerTypeModalVisible(false);
-    goToTransactions(customerType);
   }
 
   function goToSales() {
@@ -460,19 +447,62 @@ export function DashboardScreen() {
 
   const grossProfit = dashboard?.totalGrossProfit ?? 0;
   const newCustomerCount = dashboard?.newCustomerCount ?? 0;
-  // Existing = total customers for the period minus new ones (e.g. 100
-  // total, 10 new -> 90 existing). Clamped to 0 so a stale/missing
-  // totalCustomerCount from the backend never shows a negative number.
-  const existingCustomerCount = Math.max(
-    (dashboard?.totalCustomerCount ?? 0) - newCustomerCount,
-    0,
-  );
+  // Distinct customers who transacted this period and weren't new in it —
+  // computed server-side, not derived from a total-minus-new subtraction.
+  const existingCustomerCount = dashboard?.existingCustomerCount ?? 0;
   const formatTrendLabel =
     activeTab === "daily"
       ? formatDayLabel
       : activeTab === "monthly"
         ? formatMonthTrendLabel
         : (label: string) => label;
+
+  const profitTrendRaw = dashboard?.profitChart ?? [];
+  const profitTrendData = profitTrendRaw.map((item) => ({
+    // Defensive fallback to 0 — if the API being hit hasn't been
+    // redeployed with the `margin` field yet, this would otherwise be
+    // undefined and crash formatAmount()'s toLocaleString() call.
+    value: (profitViewMode === "margin" ? item.margin : item.value) ?? 0,
+    label: formatTrendLabel(item.label),
+  }));
+
+  // Monthly-only comparison: last month vs this month vs the same month
+  // last year. The 5-month trailing profitChart already contains "last
+  // month" and "this month" as its final two points; "same month last
+  // year" comes from its own backend query (dashboard.lastYearSameMonth).
+  function pickProfitValue(item: ProfitChartItem): number {
+    return (profitViewMode === "margin" ? item.margin : item.value) ?? 0;
+  }
+
+  const monthComparisonData =
+    activeTab === "monthly" && profitTrendRaw.length >= 2
+      ? [
+          {
+            label: formatMonthTrendLabel(
+              profitTrendRaw[profitTrendRaw.length - 2].label,
+            ),
+            value: pickProfitValue(profitTrendRaw[profitTrendRaw.length - 2]),
+            highlight: false,
+          },
+          {
+            label: formatMonthTrendLabel(
+              profitTrendRaw[profitTrendRaw.length - 1].label,
+            ),
+            value: pickProfitValue(profitTrendRaw[profitTrendRaw.length - 1]),
+            highlight: true,
+          },
+          {
+            label: dashboard?.lastYearSameMonth
+              ? formatMonthTrendLabel(dashboard.lastYearSameMonth.label)
+              : `${formatMonthTrendLabel(profitTrendRaw[profitTrendRaw.length - 1].label).split(" ")[0]} '${(monthYear.year - 1).toString().slice(2)}`,
+            value: dashboard?.lastYearSameMonth
+              ? pickProfitValue(dashboard.lastYearSameMonth)
+              : 0,
+            highlight: false,
+          },
+        ]
+      : null;
+  const thisMonthValue = monthComparisonData?.[1]?.value ?? 0;
 
   // Always show all four risk buckets, defaulting missing ones to zero —
   // the API only returns entries that have data for the selected range.
@@ -482,6 +512,45 @@ export function DashboardScreen() {
     return { ...meta, total: found?.total ?? 0 };
   });
   const riskTotal = riskBreakdown.reduce((sum, item) => sum + item.total, 0);
+
+  function renderProfitToggle() {
+    return (
+      <View style={styles.profitToggleRow}>
+        <Pressable
+          onPress={() => setProfitViewMode("profit")}
+          style={[
+            styles.profitToggleOption,
+            profitViewMode === "profit" && styles.profitToggleOptionActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.profitToggleText,
+              profitViewMode === "profit" && styles.profitToggleTextActive,
+            ]}
+          >
+            Profit
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setProfitViewMode("margin")}
+          style={[
+            styles.profitToggleOption,
+            profitViewMode === "margin" && styles.profitToggleOptionActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.profitToggleText,
+              profitViewMode === "margin" && styles.profitToggleTextActive,
+            ]}
+          >
+            Margin
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -722,66 +791,6 @@ export function DashboardScreen() {
         </Pressable>
       </Modal>
 
-      <Modal
-        visible={customerTypeModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCustomerTypeModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setCustomerTypeModalVisible(false)}
-        >
-          <Pressable
-            style={[styles.modalCard, { paddingBottom: insets.bottom }]}
-            onPress={() => {}}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>View Transactions For</Text>
-              <Pressable onPress={() => setCustomerTypeModalVisible(false)}>
-                <Text style={styles.modalDone}>Close</Text>
-              </Pressable>
-            </View>
-            <View style={styles.customerTypeList}>
-              {/*
-               * TODO(backend): "NEW" / "EXISTING" are passed through as the
-               * `customerType` param but the transaction API has no field or
-               * filter to distinguish new vs existing customers yet — the
-               * detail transaction screen currently shows all transactions
-               * regardless of this selection. Wire this up once the backend
-               * exposes it.
-               */}
-              {CUSTOMER_TYPE_OPTIONS.map((option) => (
-                <Pressable
-                  key={option.value}
-                  onPress={() => selectCustomerType(option.value)}
-                  style={({ pressed }) => [
-                    styles.customerTypeOption,
-                    pressed && styles.customerTypeOptionPressed,
-                  ]}
-                >
-                  <View style={styles.customerTypeOptionLeft}>
-                    <Ionicons
-                      name={option.icon}
-                      size={20}
-                      color={BRAND_COLOR}
-                    />
-                    <Text style={styles.customerTypeOptionText}>
-                      {option.label}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color="#D1D5DB"
-                  />
-                </Pressable>
-              ))}
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       {loading ? (
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={BRAND_COLOR} />
@@ -816,7 +825,7 @@ export function DashboardScreen() {
         >
           <View style={styles.statGrid}>
             <Pressable
-              onPress={openCustomerTypeModal}
+              onPress={goToTransactions}
               style={({ pressed }) => [
                 styles.statTile,
                 styles.statTileWide,
@@ -997,7 +1006,10 @@ export function DashboardScreen() {
             )}
           </View>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Profit Trend</Text>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>Profit Trend</Text>
+              {renderProfitToggle()}
+            </View>
             {(dashboard?.profitChart.length ?? 0) === 0 ? (
               <View style={styles.emptyChart}>
                 <Ionicons
@@ -1015,10 +1027,7 @@ export function DashboardScreen() {
               >
                 {lineChartWidth > 0 && (
                   <LineChart
-                    data={(dashboard?.profitChart ?? []).map((item) => ({
-                      value: item.value,
-                      label: formatTrendLabel(item.label),
-                    }))}
+                    data={profitTrendData}
                     height={180}
                     adjustToWidth
                     parentWidth={lineChartWidth}
@@ -1072,6 +1081,90 @@ export function DashboardScreen() {
               </View>
             )}
           </View>
+
+          {monthComparisonData && (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardTitle}>Profit Comparison</Text>
+                {renderProfitToggle()}
+              </View>
+              <View style={styles.comparisonBarRow}>
+                {monthComparisonData.map((item, index) => {
+                  const maxValue = Math.max(
+                    ...monthComparisonData.map((entry) => entry.value),
+                    1,
+                  );
+                  const barHeight = Math.max(
+                    (item.value / maxValue) * 120,
+                    4,
+                  );
+                  // How this bar's period compares to "this month" — up
+                  // (▲) when that period was HIGHER than now, down (▼)
+                  // when it was lower. Only shown on the two comparison
+                  // bars, not on "this month" itself.
+                  const changePercent =
+                    thisMonthValue !== 0
+                      ? ((item.value - thisMonthValue) /
+                          Math.abs(thisMonthValue)) *
+                        100
+                      : null;
+
+                  return (
+                    // Position-based key, not the label — the 3 slots
+                    // (last month/this month/same month last year) can
+                    // legitimately format to the same display text (e.g.
+                    // before the backend adds lastYearSameMonth, or if two
+                    // periods happen to share a label), and labels are for
+                    // display, not identity.
+                    <View
+                      key={`comparison-${index}`}
+                      style={styles.comparisonBarColumn}
+                    >
+                      <View
+                        style={[
+                          styles.comparisonValuePill,
+                          item.highlight && styles.comparisonValuePillActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.comparisonBarValue,
+                            item.highlight && styles.comparisonBarValueActive,
+                          ]}
+                        >
+                          RM {formatAmount(item.value)}
+                        </Text>
+                      </View>
+                      <LinearGradient
+                        colors={
+                          item.highlight
+                            ? COMPARISON_NOW_GRADIENT
+                            : COMPARISON_REFERENCE_GRADIENT
+                        }
+                        style={[styles.comparisonBar, { height: barHeight }]}
+                      >
+                        <Text style={styles.comparisonBarInsideLabel}>
+                          {item.highlight
+                            ? "NOW"
+                            : changePercent === null
+                              ? ""
+                              : `${changePercent >= 0 ? "▲" : "▼"} ${Math.abs(changePercent).toFixed(0)}%`}
+                        </Text>
+                      </LinearGradient>
+                      <Text
+                        style={[
+                          styles.comparisonBarLabel,
+                          item.highlight && styles.comparisonBarLabelActive,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           <Pressable
             onPress={goToDataRisk}
@@ -1441,31 +1534,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     marginHorizontal: Spacing.three,
   },
-  customerTypeList: {
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.four,
-  },
-  customerTypeOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: Spacing.three,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  customerTypeOptionPressed: {
-    opacity: 0.6,
-  },
-  customerTypeOptionLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.two,
-  },
-  customerTypeOptionText: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#111827",
-  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -1486,6 +1554,90 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: Spacing.three,
+  },
+  profitToggleRow: {
+    flexDirection: "row",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 10,
+    padding: 2,
+    gap: 2,
+  },
+  profitToggleOption: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  profitToggleOptionActive: {
+    backgroundColor: BRAND_COLOR,
+  },
+  profitToggleText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  profitToggleTextActive: {
+    color: "#FFFFFF",
+  },
+  comparisonBarRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-around",
+    gap: Spacing.two,
+    height: 170,
+    marginTop: Spacing.two,
+  },
+  comparisonBarColumn: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+  },
+  comparisonBar: {
+    width: "100%",
+    maxWidth: 56,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    alignItems: "center",
+    paddingTop: 6,
+    shadowColor: BRAND_COLOR,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  comparisonBarInsideLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+  comparisonValuePill: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 3,
+  },
+  comparisonValuePillActive: {
+    backgroundColor: BRAND_COLOR,
+  },
+  comparisonBarValue: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  comparisonBarValueActive: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  comparisonBarLabel: {
+    fontSize: 11,
+    color: "#9CA3AF",
+  },
+  comparisonBarLabelActive: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#111827",
   },
   riskRow: {
     marginBottom: Spacing.three,

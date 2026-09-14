@@ -8,24 +8,28 @@ export type BalanceChartItem = {
 
 export type ProfitChartItem = {
   label: string;
+  // Net profit = margin - expenses (matches the backend's
+  // sp_NetProfit_Yearly definition).
   value: number;
+  // Margin = SUM(SALE_RM - SALE_COST), before subtracting expenses.
+  margin: number;
 };
 
 export type DashboardData = {
   newCustomerCount: number;
-  // TODO(backend): /Api/Dashboard, /Api/DashboardByMonth and
-  // /Api/DashboardByYear don't return this yet — confirm the field name
-  // with backend and wire it up once it's added. Defaults to 0 until then.
-  // Existing customers is derived on our side as totalCustomerCount minus
-  // newCustomerCount (e.g. 100 total, 10 new -> 90 existing) — see
-  // `existingCustomerCount` in dashboard-screen.tsx.
-  totalCustomerCount?: number;
+  // Distinct customers who transacted within the selected period and
+  // weren't new in that same period (i.e. registered before it started) —
+  // "returning" customers, computed server-side.
+  existingCustomerCount: number;
   totalSalesRM: number;
   totalBuyRM: number;
   totalGrossProfit: number;
   transactionCount: number;
   balanceChart: BalanceChartItem[];
   profitChart: ProfitChartItem[];
+  // DashboardByMonth only — same calendar month, previous year, for the
+  // "Profit Comparison" card. undefined for the daily/yearly dashboard.
+  lastYearSameMonth?: ProfitChartItem;
   dataRiskChart: DataRiskItem[];
 };
 
