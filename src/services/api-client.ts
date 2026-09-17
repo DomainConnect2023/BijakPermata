@@ -7,7 +7,18 @@ const FALLBACK_BASE_URL = "https://bijakpermatadev.domainsb.com.my";
 
 let cachedIpAddress: string | null = null;
 
+// DEV-ONLY (commented out before pushing): points the app at the API
+// running locally (`dotnet run` in BijakPermataApi) instead of the remote
+// dev server, for testing on the Android emulator (10.0.2.2 is the
+// emulator's alias for the host machine's localhost). Uncomment both this
+// const and the block below it to test against a local backend again.
+// const LOCAL_DEV_BASE_URL = "http://10.0.2.2:5147";
+
 export async function getIPAddress(): Promise<string> {
+  // if (__DEV__) {
+  //   return LOCAL_DEV_BASE_URL;
+  // }
+
   if (cachedIpAddress) {
     return cachedIpAddress;
   }

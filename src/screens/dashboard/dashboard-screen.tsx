@@ -458,6 +458,12 @@ export function DashboardScreen() {
         : (label: string) => label;
 
   const profitTrendRaw = dashboard?.profitChart ?? [];
+  // Margin for the current period (today/this month/this year) — the last
+  // point in the trailing profitChart series.
+  const currentMargin =
+    profitTrendRaw.length > 0
+      ? (profitTrendRaw[profitTrendRaw.length - 1].margin ?? 0)
+      : 0;
   const profitTrendData = profitTrendRaw.map((item) => ({
     // Defensive fallback to 0 — if the API being hit hasn't been
     // redeployed with the `margin` field yet, this would otherwise be
@@ -922,9 +928,20 @@ export function DashboardScreen() {
               iconBackground={
                 grossProfit >= 0 ? `${SUCCESS_COLOR}15` : `${ERROR_COLOR}15`
               }
-              label="Gross Profit"
+              label="Summary of Stock"
               value={`RM ${formatAmount(grossProfit)}`}
               valueColor={grossProfit >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
+            />
+            <StatTile
+              wide
+              icon="analytics-outline"
+              iconColor={currentMargin >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
+              iconBackground={
+                currentMargin >= 0 ? `${SUCCESS_COLOR}15` : `${ERROR_COLOR}15`
+              }
+              label="Margin"
+              value={`RM ${formatAmount(currentMargin)}`}
+              valueColor={currentMargin >= 0 ? SUCCESS_COLOR : ERROR_COLOR}
               onPress={goToMargin}
             />
           </View>

@@ -171,7 +171,14 @@ export function MarginReportScreen({ initialFromDate, initialToDate }: Props) {
     setActivePicker(null);
   }
 
-  const totalProfit = items.reduce((sum, item) => sum + item.balanceRM, 0);
+  // Sum of each currency's margin (SaleRM - SaleCost) — matches the
+  // "Margin" figure shown per currency in the expanded row below. This
+  // used to sum `balanceRM` (closing stock value), which is a different,
+  // unrelated number.
+  const totalMargin = items.reduce((sum, item) => sum + item.profit, 0);
+  // Kept separate from totalMargin — the card header/percentage below is
+  // about balance (stock value), not margin, so it needs its own total.
+  const totalBalance = items.reduce((sum, item) => sum + item.balanceRM, 0);
 
   const breakdown = useMemo(() => {
     const positive = items
@@ -207,7 +214,7 @@ export function MarginReportScreen({ initialFromDate, initialToDate }: Props) {
   const renderMarginItem = ({ item }: { item: MarginProfitItem }) => {
     const expanded = expandedCurrencies.has(item.currency);
     const percentOfTotal =
-      totalProfit !== 0 ? (item.balanceRM / totalProfit) * 100 : 0;
+      totalBalance !== 0 ? (item.balanceRM / totalBalance) * 100 : 0;
 
     return (
       <Pressable
@@ -347,14 +354,14 @@ export function MarginReportScreen({ initialFromDate, initialToDate }: Props) {
       {!loading && !errorMessage && items.length > 0 && (
         <View style={styles.summaryCard}>
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total Profit</Text>
+            <Text style={styles.summaryLabel}>Total Margin</Text>
             <Text
               style={[
                 styles.summaryValue,
-                totalProfit >= 0 ? styles.summaryIn : styles.summaryOut,
+                totalMargin >= 0 ? styles.summaryIn : styles.summaryOut,
               ]}
             >
-              RM {formatAmount(totalProfit)}
+              RM {formatAmount(totalMargin)}
             </Text>
           </View>
         </View>
