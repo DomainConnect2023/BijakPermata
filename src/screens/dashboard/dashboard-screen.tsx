@@ -43,9 +43,15 @@ const OTHER_COLOR = "#C4C9D4";
 // Total Transactions tile icon doesn't look identical to every other
 // brand-blue icon on the dashboard.
 const TRANSACTIONS_ICON_COLOR = "#6366F1";
-// Profit Comparison bar chart: blue = "now", violet = a reference period —
-// color encodes "which bar is current", not "good vs bad".
+// Profit Comparison bar chart: a distinct hue per period (blue = current,
+// teal = last month, violet = same month last year) so all three read as
+// clearly different periods, not just "current vs everything else" —
+// color encodes "which period", not "good vs bad".
 const COMPARISON_NOW_GRADIENT: [string, string] = ["#4DA3F2", "#208AEF"];
+const COMPARISON_LAST_MONTH_GRADIENT: [string, string] = [
+  "#5EEAD4",
+  "#2DD4BF",
+];
 const COMPARISON_REFERENCE_GRADIENT: [string, string] = [
   "#A78BFA",
   "#7C5CFC",
@@ -191,6 +197,18 @@ function formatMonthTrendLabel(monthValue: string): string {
 function balancePercent(item: BalanceChartItem, total: number): string {
   if (total <= 0) return "0.0%";
   return `${((Math.max(item.value, 0) / total) * 100).toFixed(1)}%`;
+}
+
+// Rounds a raw per-section step up to a "nice" 1/2/5 × 10^n number, so the
+// Profit Trend chart's Y-axis reads e.g. 500/1,000/1,500 instead of
+// whatever odd value falls out of maxValue / noOfSections (e.g. 457).
+function getNiceStep(rawStep: number): number {
+  if (rawStep <= 0) return 1;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const normalized = rawStep / magnitude;
+  const niceNormalized =
+    normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return niceNormalized * magnitude;
 }
 
 type StatTileProps = {
@@ -464,11 +482,63 @@ export function DashboardScreen() {
     profitTrendRaw.length > 0
       ? (profitTrendRaw[profitTrendRaw.length - 1].margin ?? 0)
       : 0;
-  const profitTrendData = profitTrendRaw.map((item) => ({
+  const profitTrendRawValues = profitTrendRaw.map(
     // Defensive fallback to 0 — if the API being hit hasn't been
     // redeployed with the `margin` field yet, this would otherwise be
     // undefined and crash formatAmount()'s toLocaleString() call.
-    value: (profitViewMode === "margin" ? item.margin : item.value) ?? 0,
+    (item) => (profitViewMode === "margin" ? item.margin : item.value) ?? 0,
+  );
+
+  // Fixed section counts keep the chart's height bounded no matter how
+  // extreme a single point is — without this, a huge negative outlier
+  // (e.g. -17,842 against a small positive max) makes the library
+  // auto-derive dozens of below-axis sections and the chart runs off the
+  // bottom of the screen.
+  //
+  // Deliberately kept to ONE shared step for both the positive and
+  // negative sides (never pass a `negativeStepValue` different from
+  // `stepValue`): the chart library takes a different, less-exercised
+  // pixel-mapping code path whenever those two differ, which mis-placed
+  // negative points as if they were positive.
+  //
+  // The step is sized off the SECOND-most-extreme value on each side
+  // (skipping the single worst outlier), so one catastrophic day doesn't
+  // single-handedly force the whole axis — and everyday values — to look
+  // flat. That one outlier point is then clamped to the chart's visible
+  // range for its plotted position only; the tooltip still shows its real
+  // value via `trueValue`.
+  const PROFIT_CHART_SECTIONS = 4;
+  const PROFIT_CHART_NEGATIVE_SECTIONS = 3;
+
+  function secondMostExtremeAbs(values: number[]): number {
+    if (values.length === 0) return 0;
+    const sortedDesc = [...values].map(Math.abs).sort((a, b) => b - a);
+    return sortedDesc.length > 1 ? sortedDesc[1] : sortedDesc[0];
+  }
+
+  const positiveValues = profitTrendRawValues.filter((v) => v > 0);
+  const negativeValues = profitTrendRawValues.filter((v) => v < 0);
+  const profitChartHasNegative = negativeValues.length > 0;
+  const profitChartStepValue = getNiceStep(
+    Math.max(
+      secondMostExtremeAbs(positiveValues) / PROFIT_CHART_SECTIONS,
+      profitChartHasNegative
+        ? secondMostExtremeAbs(negativeValues) / PROFIT_CHART_NEGATIVE_SECTIONS
+        : 0,
+      1,
+    ),
+  );
+  const profitChartMaxValue = profitChartStepValue * PROFIT_CHART_SECTIONS;
+  const profitChartMinValue = profitChartHasNegative
+    ? -(profitChartStepValue * PROFIT_CHART_NEGATIVE_SECTIONS)
+    : 0;
+
+  const profitTrendData = profitTrendRaw.map((item, index) => ({
+    value: Math.min(
+      Math.max(profitTrendRawValues[index], profitChartMinValue),
+      profitChartMaxValue,
+    ),
+    trueValue: profitTrendRawValues[index],
     label: formatTrendLabel(item.label),
   }));
 
@@ -1067,7 +1137,19 @@ export function DashboardScreen() {
                     rulesColor="#F3F4F6"
                     xAxisColor="#E5E7EB"
                     yAxisColor="#E5E7EB"
-                    noOfSections={4}
+                    noOfSections={PROFIT_CHART_SECTIONS}
+                    stepValue={profitChartStepValue}
+                    maxValue={profitChartMaxValue}
+                    {...(profitChartHasNegative
+                      ? {
+                          noOfSectionsBelowXAxis:
+                            PROFIT_CHART_NEGATIVE_SECTIONS,
+                          // No `negativeStepValue` override here on
+                          // purpose — see the comment by
+                          // PROFIT_CHART_SECTIONS above.
+                          mostNegativeValue: profitChartMinValue,
+                        }
+                      : {})}
                     isAnimated
                     pointerConfig={{
                       pointerStripHeight: 140,
@@ -1081,11 +1163,11 @@ export function DashboardScreen() {
                       pointerLabelWidth: 110,
                       pointerLabelHeight: 40,
                       pointerLabelComponent: (
-                        items: { value: number; label: string }[],
+                        items: { value: number; trueValue: number; label: string }[],
                       ) => (
                         <View style={styles.tooltip}>
                           <Text style={styles.tooltipValue}>
-                            RM {formatAmount(items[0].value)}
+                            RM {formatAmount(items[0].trueValue)}
                           </Text>
                           <Text style={styles.tooltipLabel}>
                             {items[0].label}
@@ -1156,13 +1238,15 @@ export function DashboardScreen() {
                         colors={
                           item.highlight
                             ? COMPARISON_NOW_GRADIENT
-                            : COMPARISON_REFERENCE_GRADIENT
+                            : index === 0
+                              ? COMPARISON_LAST_MONTH_GRADIENT
+                              : COMPARISON_REFERENCE_GRADIENT
                         }
                         style={[styles.comparisonBar, { height: barHeight }]}
                       >
                         <Text style={styles.comparisonBarInsideLabel}>
                           {item.highlight
-                            ? "NOW"
+                            ? "CURRENT"
                             : changePercent === null
                               ? ""
                               : `${changePercent >= 0 ? "▲" : "▼"} ${Math.abs(changePercent).toFixed(0)}%`}
