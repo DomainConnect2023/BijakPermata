@@ -69,6 +69,44 @@ export async function fetchDailyBalance(
   return result.data;
 }
 
+export type DailyStockItem = {
+  currency: string;
+  ob: number;
+  obRM: number;
+  buy: number;
+  buyRM: number;
+  sale: number;
+  saleRM: number;
+  saleCost: number;
+  balance: number;
+  balRM: number;
+};
+
+type DailyStockResponse = {
+  date: string;
+  data: DailyStockItem[];
+};
+
+export async function fetchDailyStock(date: Date): Promise<DailyStockItem[]> {
+  let response: Response;
+  try {
+    const baseUrl = await getIPAddress();
+    response = await fetch(
+      `${baseUrl}/Report/GetDailyStock?date=${formatDateParam(date)}`,
+      { headers: { "Content-Type": "application/json" } },
+    );
+  } catch {
+    throw new Error("Unable to connect to the server. Please try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to load daily stock report");
+  }
+
+  const result: DailyStockResponse = await response.json();
+  return result.data;
+}
+
 export type MarginProfitItem = {
   currency: string;
   ob: number;
@@ -226,6 +264,157 @@ type PurchaseSalesResponse = {
   status: PurchaseSalesStatus;
   data: PurchaseSalesGroup[];
 };
+
+export type CancelledTransactionItem = {
+  receiptNo: string;
+  date: string;
+  time: string;
+  currency: string;
+  fcAmount: number;
+  rate: number;
+  rm: number;
+  customer: string | null;
+  icNo: string | null;
+  pcCode: string;
+  user: string;
+  remarks: string | null;
+  remCancel: string | null;
+};
+
+type CancelledTransactionResponse = {
+  startDate: string;
+  endDate: string;
+  data: CancelledTransactionItem[];
+};
+
+export async function fetchBuyCancel(
+  startDate: Date,
+  endDate: Date,
+): Promise<CancelledTransactionItem[]> {
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+
+  let response: Response;
+  try {
+    const baseUrl = await getIPAddress();
+    response = await fetch(
+      `${baseUrl}/Report/GetBuyCancel?${params.toString()}`,
+      { headers: { "Content-Type": "application/json" } },
+    );
+  } catch {
+    throw new Error("Unable to connect to the server. Please try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to load buy cancel report");
+  }
+
+  const result: CancelledTransactionResponse = await response.json();
+  return result.data;
+}
+
+export async function fetchSaleCancel(
+  startDate: Date,
+  endDate: Date,
+): Promise<CancelledTransactionItem[]> {
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+
+  let response: Response;
+  try {
+    const baseUrl = await getIPAddress();
+    response = await fetch(
+      `${baseUrl}/Report/GetSaleCancel?${params.toString()}`,
+      { headers: { "Content-Type": "application/json" } },
+    );
+  } catch {
+    throw new Error("Unable to connect to the server. Please try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to load sale cancel report");
+  }
+
+  const result: CancelledTransactionResponse = await response.json();
+  return result.data;
+}
+
+export type ExpensesListingItem = {
+  refNo: string;
+  date: string;
+  glCode: string | null;
+  description: string | null;
+  receipt: string | null;
+  rm: number;
+};
+
+type ExpensesListingResponse = {
+  startDate: string;
+  endDate: string;
+  data: ExpensesListingItem[];
+};
+
+export async function fetchExpensesListing(
+  startDate: Date,
+  endDate: Date,
+  glCode?: string | null,
+): Promise<ExpensesListingItem[]> {
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+  if (glCode) params.set("glCode", glCode);
+
+  let response: Response;
+  try {
+    const baseUrl = await getIPAddress();
+    response = await fetch(
+      `${baseUrl}/Report/GetExpensesListing?${params.toString()}`,
+      { headers: { "Content-Type": "application/json" } },
+    );
+  } catch {
+    throw new Error("Unable to connect to the server. Please try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to load expenses listing report");
+  }
+
+  const result: ExpensesListingResponse = await response.json();
+  return result.data;
+}
+
+export type GLCodeItem = {
+  glCode: string;
+  description: string | null;
+};
+
+type GLCodeResponse = {
+  data: GLCodeItem[];
+};
+
+export async function fetchExpensesGLCodes(): Promise<GLCodeItem[]> {
+  let response: Response;
+  try {
+    const baseUrl = await getIPAddress();
+    response = await fetch(`${baseUrl}/Report/GetExpensesGLCode`, {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch {
+    throw new Error("Unable to connect to the server. Please try again.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to load GL code list");
+  }
+
+  const result: GLCodeResponse = await response.json();
+  return result.data;
+}
 
 export async function fetchPurchaseSales(
   startDate: Date,

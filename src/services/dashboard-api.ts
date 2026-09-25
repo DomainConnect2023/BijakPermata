@@ -25,6 +25,9 @@ export type DashboardData = {
   totalBuyRM: number;
   totalGrossProfit: number;
   transactionCount: number;
+  totalExpensesRM: number;
+  buyCancelCount: number;
+  saleCancelCount: number;
   balanceChart: BalanceChartItem[];
   profitChart: ProfitChartItem[];
   // DashboardByMonth only — same calendar month, previous year, for the

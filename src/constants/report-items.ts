@@ -36,7 +36,7 @@ export const REPORT_ITEMS: ReportMenuItem[] = [
   },
   {
     name: "finance",
-    title: "Finance",
+    title: "Expenses",
     icon: "wallet-outline",
     activeIcon: "wallet",
   },

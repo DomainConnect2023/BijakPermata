@@ -389,6 +389,26 @@ export function DashboardScreen() {
     });
   }
 
+  function goToExpenses() {
+    const { from, to } = getDrillDownRange();
+    router.push({
+      pathname: "/finance",
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
+    });
+  }
+
+  function goToBuyCancel() {
+    const { from, to } = getDrillDownRange();
+    router.push({
+      pathname: "/purchasing/buy-cancel",
+      params: { fromDate: formatDateParam(from), toDate: formatDateParam(to) },
+    });
+  }
+
+  function goToSaleCancel() {
+    router.push("/sales/sale-cancel-report");
+  }
+
   function goToDataRisk() {
     const { from, to } = getDrillDownRange();
     router.push({
@@ -976,7 +996,7 @@ export function DashboardScreen() {
               </View>
             </Pressable>
             <StatTile
-              icon="trending-up-outline"
+              icon="pricetag-outline"
               iconColor={SUCCESS_COLOR}
               iconBackground={`${SUCCESS_COLOR}15`}
               label="Total Sales"
@@ -990,6 +1010,73 @@ export function DashboardScreen() {
               label="Total Buy"
               value={`RM ${formatAmount(dashboard?.totalBuyRM ?? 0)}`}
               onPress={goToPurchasing}
+            />
+            <View style={styles.splitTile}>
+              <Pressable
+                onPress={goToSaleCancel}
+                style={({ pressed }) => [
+                  styles.splitHalf,
+                  pressed && styles.statTilePressed,
+                ]}
+              >
+                <View style={styles.statTileHeader}>
+                  <View
+                    style={[
+                      styles.statIcon,
+                      { backgroundColor: `${ERROR_COLOR}15` },
+                    ]}
+                  >
+                    <Ionicons
+                      name="pricetag-outline"
+                      size={18}
+                      color={ERROR_COLOR}
+                    />
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </View>
+                <Text style={styles.statLabel}>Sale Cancel</Text>
+                <Text style={styles.statValue}>
+                  {formatCount(dashboard?.saleCancelCount ?? 0)}
+                </Text>
+              </Pressable>
+
+              <View style={styles.splitDivider} />
+
+              <Pressable
+                onPress={goToBuyCancel}
+                style={({ pressed }) => [
+                  styles.splitHalf,
+                  pressed && styles.statTilePressed,
+                ]}
+              >
+                <View style={styles.statTileHeader}>
+                  <View
+                    style={[
+                      styles.statIcon,
+                      { backgroundColor: `${ERROR_COLOR}15` },
+                    ]}
+                  >
+                    <Ionicons
+                      name="cart-outline"
+                      size={18}
+                      color={ERROR_COLOR}
+                    />
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </View>
+                <Text style={styles.statLabel}>Buy Cancel</Text>
+                <Text style={styles.statValue}>
+                  {formatCount(dashboard?.buyCancelCount ?? 0)}
+                </Text>
+              </Pressable>
+            </View>
+            <StatTile
+              icon="wallet-outline"
+              iconColor={ERROR_COLOR}
+              iconBackground={`${ERROR_COLOR}15`}
+              label="Expenses"
+              value={`RM ${formatAmount(dashboard?.totalExpensesRM ?? 0)}`}
+              onPress={goToExpenses}
             />
             <StatTile
               wide
@@ -1030,8 +1117,8 @@ export function DashboardScreen() {
                     color: item.color,
                   }))}
                   donut
-                  radius={78}
-                  innerRadius={50}
+                  radius={92}
+                  innerRadius={60}
                   innerCircleColor="#FFFFFF"
                   focusOnPress
                   toggleFocusOnPress
@@ -1529,6 +1616,27 @@ const styles = StyleSheet.create({
   statTileWide: {
     flexBasis: "100%",
   },
+  splitTile: {
+    flexBasis: "100%",
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  splitHalf: {
+    flex: 1,
+    padding: Spacing.three,
+    gap: 6,
+  },
+  splitDivider: {
+    width: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: Spacing.three,
+  },
   statTilePressed: {
     opacity: 0.7,
   },
@@ -1812,21 +1920,21 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   pieCenterContent: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
   },
   pieCenterLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "500",
-    color: "#9CA3AF",
+    color: "#6B7280",
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
   pieCenterValue: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: "700",
     color: "#111827",
   },
@@ -1879,22 +1987,22 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   legendLabel: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: "#111827",
   },
   legendValue: {
-    fontSize: 11,
-    color: "#6B7280",
+    fontSize: 14,
+    color: "#4B5563",
   },
   legendPercent: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     color: "#6B7280",
   },
