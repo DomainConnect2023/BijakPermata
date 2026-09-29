@@ -69,6 +69,13 @@ export async function fetchDailyBalance(
   return result.data;
 }
 
+// Printable HTML report page — opened directly in the device's browser via
+// Linking.openURL, so exporting/printing/sharing needs no native module.
+export async function getDailyBalanceReportUrl(date: Date): Promise<string> {
+  const baseUrl = await getIPAddress();
+  return `${baseUrl}/Report/GetDailyBalanceReport?date=${formatDateParam(date)}`;
+}
+
 export type DailyStockItem = {
   currency: string;
   ob: number;

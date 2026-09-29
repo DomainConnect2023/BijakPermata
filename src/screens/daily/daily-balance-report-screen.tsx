@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useCallback, useEffect, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -24,6 +26,7 @@ import { usePageAccess } from "@/hooks/use-page-access";
 import {
   type DailyBalanceItem,
   fetchDailyBalance,
+  getDailyBalanceReportUrl,
 } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
@@ -60,6 +63,10 @@ export function DailyBalanceReportScreen() {
   const { loading: permissionLoading, access } = usePageAccess([
     "DailyBalance",
   ]);
+  // The visible header (hamburger + title) belongs to the Drawer, not this
+  // screen's own Stack (headerShown: false) — "/(app)" is the Drawer's own
+  // navigator id; setOptions() on it affects its current screen ("daily").
+  const dailyNavigation = useNavigation("/(app)");
 
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
@@ -68,6 +75,7 @@ export function DailyBalanceReportScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadReport = useCallback(async (forDate: Date) => {
     setErrorMessage(null);
@@ -110,6 +118,43 @@ export function DailyBalanceReportScreen() {
   function handleDismiss() {
     setShowPicker(false);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getDailyBalanceReportUrl(date);
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [date]);
+
+  // Injects the export button into the Drawer's header for this route;
+  // removed again on unmount so it doesn't leak into other sections.
+  useLayoutEffect(() => {
+    dailyNavigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      dailyNavigation.setOptions({ headerRight: undefined });
+    };
+  }, [dailyNavigation, exporting, handleExport]);
 
   const totalBalance = items.reduce(
     (sum, item) => sum + item.closingBalance * (item.rate / 100),
@@ -366,6 +411,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   // 汇总卡片
   summaryCard: {
