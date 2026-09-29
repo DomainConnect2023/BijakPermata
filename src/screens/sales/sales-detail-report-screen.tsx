@@ -2,11 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -27,6 +28,7 @@ import {
   type PurchaseSalesGroup,
   fetchPurchaseSales,
   formatDateParam,
+  getPurchaseSalesReportUrl,
   parseDateParam,
 } from "@/services/report-api";
 
@@ -89,6 +91,8 @@ export function SalesDetailReportScreen({
 }: Props) {
   const router = useRouter();
   const { loading: permissionLoading, access } = usePageAccess(["SalesDetail"]);
+  const sectionNavigation = useNavigation("/(app)");
+  const [exporting, setExporting] = useState(false);
 
   const [fromDate, setFromDate] = useState(() =>
     initialFromDate ? parseDateParam(initialFromDate) : startOfDay(new Date()),
@@ -210,6 +214,45 @@ export function SalesDetailReportScreen({
   function handleDismiss() {
     setActivePicker(null);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getPurchaseSalesReportUrl(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+        "S",
+      );
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [appliedFilters.fromDate, appliedFilters.toDate]);
+
+  useLayoutEffect(() => {
+    sectionNavigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      sectionNavigation.setOptions({ headerRight: undefined });
+    };
+  }, [sectionNavigation, exporting, handleExport]);
 
   function openCurrency(group: PurchaseSalesGroup) {
     router.push({
@@ -509,6 +552,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   searchButton: {
     flexDirection: "row",

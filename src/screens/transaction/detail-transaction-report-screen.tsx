@@ -2,12 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -29,6 +30,7 @@ import {
   type DetailTransactionStatus,
   fetchCurrencyList,
   fetchDetailTransactions,
+  getDetailTransactionReportUrl,
   parseDateParam,
 } from "@/services/report-api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -111,6 +113,8 @@ export function DetailTransactionReportScreen({
   const { loading: permissionLoading, access } = usePageAccess([
     "DetailTransaction",
   ]);
+  const navigation = useNavigation();
+  const [exporting, setExporting] = useState(false);
 
   const [fromDate, setFromDate] = useState(() =>
     initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
@@ -273,6 +277,51 @@ export function DetailTransactionReportScreen({
   function handleDismiss() {
     setActivePicker(null);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getDetailTransactionReportUrl(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+        appliedFilters.currency,
+        appliedFilters.status,
+      );
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [
+    appliedFilters.fromDate,
+    appliedFilters.toDate,
+    appliedFilters.currency,
+    appliedFilters.status,
+  ]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      navigation.setOptions({ headerRight: undefined });
+    };
+  }, [navigation, exporting, handleExport]);
 
   function selectCurrency(code: string | null) {
     setSelectedCurrency(code);
@@ -724,6 +773,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   currencySelector: {
     flexDirection: "row",

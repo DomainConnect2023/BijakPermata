@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -23,6 +25,7 @@ import { usePageAccess } from "@/hooks/use-page-access";
 import {
   type MarginProfitItem,
   fetchMarginProfit,
+  getMarginProfitReportUrl,
   parseDateParam,
 } from "@/services/report-api";
 
@@ -72,6 +75,8 @@ export function MarginReportScreen({ initialFromDate, initialToDate }: Props) {
   const { loading: permissionLoading, access } = usePageAccess([
     "MarginReport",
   ]);
+  const navigation = useNavigation();
+  const [exporting, setExporting] = useState(false);
 
   const [fromDate, setFromDate] = useState(() =>
     initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
@@ -170,6 +175,44 @@ export function MarginReportScreen({ initialFromDate, initialToDate }: Props) {
   function handleDismiss() {
     setActivePicker(null);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getMarginProfitReportUrl(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+      );
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [appliedFilters.fromDate, appliedFilters.toDate]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      navigation.setOptions({ headerRight: undefined });
+    };
+  }, [navigation, exporting, handleExport]);
 
   // Sum of each currency's margin (SaleRM - SaleCost) — matches the
   // "Margin" figure shown per currency in the expanded row below. This
@@ -566,6 +609,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   searchButton: {
     flexDirection: "row",

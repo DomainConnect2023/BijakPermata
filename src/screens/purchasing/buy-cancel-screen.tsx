@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useCallback, useEffect, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +24,7 @@ import { Spacing } from "@/constants/theme";
 import {
   type CancelledTransactionItem,
   fetchBuyCancel,
+  getBuyCancelReportUrl,
   parseDateParam,
 } from "@/services/report-api";
 
@@ -83,6 +86,8 @@ type Props = {
 };
 
 export function BuyCancelScreen({ initialFromDate, initialToDate }: Props) {
+  const sectionNavigation = useNavigation("/(app)");
+  const [exporting, setExporting] = useState(false);
   const [fromDate, setFromDate] = useState(() =>
     initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
   );
@@ -165,6 +170,44 @@ export function BuyCancelScreen({ initialFromDate, initialToDate }: Props) {
   function handleDismiss() {
     setActivePicker(null);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getBuyCancelReportUrl(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+      );
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [appliedFilters.fromDate, appliedFilters.toDate]);
+
+  useLayoutEffect(() => {
+    sectionNavigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      sectionNavigation.setOptions({ headerRight: undefined });
+    };
+  }, [sectionNavigation, exporting, handleExport]);
 
   const totalRM = items.reduce((sum, item) => sum + item.rm, 0);
 
@@ -445,6 +488,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   searchButton: {
     flexDirection: "row",

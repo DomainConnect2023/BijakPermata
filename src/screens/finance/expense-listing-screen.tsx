@@ -2,11 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useCallback, useEffect, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -26,6 +28,7 @@ import {
   type GLCodeItem,
   fetchExpensesGLCodes,
   fetchExpensesListing,
+  getExpensesListingReportUrl,
   parseDateParam,
 } from "@/services/report-api";
 
@@ -78,6 +81,8 @@ export function ExpenseListingScreen({
   initialToDate,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const [exporting, setExporting] = useState(false);
   const [fromDate, setFromDate] = useState(() =>
     initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
   );
@@ -207,6 +212,45 @@ export function ExpenseListingScreen({
   function handleDismiss() {
     setActivePicker(null);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getExpensesListingReportUrl(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+        appliedFilters.glCode,
+      );
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [appliedFilters.fromDate, appliedFilters.toDate, appliedFilters.glCode]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      navigation.setOptions({ headerRight: undefined });
+    };
+  }, [navigation, exporting, handleExport]);
 
   const totalRM = items.reduce((sum, item) => sum + item.rm, 0);
 
@@ -554,6 +598,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   glCodeSelector: {
     flexDirection: "row",

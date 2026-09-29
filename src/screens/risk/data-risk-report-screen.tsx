@@ -2,9 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useCallback, useEffect, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +24,7 @@ import {
   type DataRiskItem,
   type DataRiskType,
   fetchDataRisk,
+  getDataRiskReportUrl,
   parseDateParam,
 } from "@/services/report-api";
 
@@ -69,6 +72,8 @@ export function DataRiskReportScreen({
   initialFromDate,
   initialToDate,
 }: Props) {
+  const navigation = useNavigation();
+  const [exporting, setExporting] = useState(false);
   const [fromDate, setFromDate] = useState(() =>
     initialFromDate ? parseDateParam(initialFromDate) : daysAgo(30),
   );
@@ -135,6 +140,44 @@ export function DataRiskReportScreen({
   function handleDismiss() {
     setActivePicker(null);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getDataRiskReportUrl(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+      );
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [appliedFilters.fromDate, appliedFilters.toDate]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      navigation.setOptions({ headerRight: undefined });
+    };
+  }, [navigation, exporting, handleExport]);
 
   // Always show all four risk buckets, defaulting missing ones to zero —
   // the API only returns entries that have data for the selected range.
@@ -361,6 +404,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   searchButton: {
     flexDirection: "row",

@@ -18,6 +18,18 @@ export async function fetchDataRisk(
   return apiGet<DataRiskItem[]>(`/Report/GetDataRisk?${params.toString()}`);
 }
 
+export async function getDataRiskReportUrl(
+  startDate: Date,
+  endDate: Date,
+): Promise<string> {
+  const baseUrl = await getIPAddress();
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+  return `${baseUrl}/Report/GetDataRiskReport?${params.toString()}`;
+}
+
 export type DailyBalanceItem = {
   currency: string;
   balance: number;
@@ -114,6 +126,11 @@ export async function fetchDailyStock(date: Date): Promise<DailyStockItem[]> {
   return result.data;
 }
 
+export async function getDailyStockReportUrl(date: Date): Promise<string> {
+  const baseUrl = await getIPAddress();
+  return `${baseUrl}/Report/GetDailyStockReport?date=${formatDateParam(date)}`;
+}
+
 export type MarginProfitItem = {
   currency: string;
   ob: number;
@@ -164,6 +181,19 @@ export async function fetchMarginProfit(
 
   const result: MarginProfitResponse = await response.json();
   return result.data;
+}
+
+export async function getMarginProfitReportUrl(
+  fromDate: Date,
+  toDate: Date,
+): Promise<string> {
+  const baseUrl = await getIPAddress();
+  // Same dateTo/dateFrom swap as fetchMarginProfit — see the comment there.
+  const params = new URLSearchParams({
+    dateTo: formatDateParam(fromDate),
+    dateFrom: formatDateParam(toDate),
+  });
+  return `${baseUrl}/Report/GetMarginProfitReport?${params.toString()}`;
 }
 
 export async function fetchCurrencyList(): Promise<string[]> {
@@ -240,6 +270,22 @@ export async function fetchDetailTransactions(
 
   const result: DetailTransactionResponse = await response.json();
   return result.data;
+}
+
+export async function getDetailTransactionReportUrl(
+  startDate: Date,
+  endDate: Date,
+  currency: string | null,
+  status: DetailTransactionStatus = "ALL",
+): Promise<string> {
+  const baseUrl = await getIPAddress();
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+    status,
+  });
+  if (currency) params.set("currency", currency);
+  return `${baseUrl}/Report/GetDetailTransactionReport?${params.toString()}`;
 }
 
 export type PurchaseSalesTransactionItem = {
@@ -322,6 +368,18 @@ export async function fetchBuyCancel(
   return result.data;
 }
 
+export async function getBuyCancelReportUrl(
+  startDate: Date,
+  endDate: Date,
+): Promise<string> {
+  const baseUrl = await getIPAddress();
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+  return `${baseUrl}/Report/GetBuyCancelReport?${params.toString()}`;
+}
+
 export async function fetchSaleCancel(
   startDate: Date,
   endDate: Date,
@@ -348,6 +406,18 @@ export async function fetchSaleCancel(
 
   const result: CancelledTransactionResponse = await response.json();
   return result.data;
+}
+
+export async function getSaleCancelReportUrl(
+  startDate: Date,
+  endDate: Date,
+): Promise<string> {
+  const baseUrl = await getIPAddress();
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+  return `${baseUrl}/Report/GetSaleCancelReport?${params.toString()}`;
 }
 
 export type ExpensesListingItem = {
@@ -393,6 +463,20 @@ export async function fetchExpensesListing(
 
   const result: ExpensesListingResponse = await response.json();
   return result.data;
+}
+
+export async function getExpensesListingReportUrl(
+  startDate: Date,
+  endDate: Date,
+  glCode?: string | null,
+): Promise<string> {
+  const baseUrl = await getIPAddress();
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+  });
+  if (glCode) params.set("glCode", glCode);
+  return `${baseUrl}/Report/GetExpensesListingReport?${params.toString()}`;
 }
 
 export type GLCodeItem = {
@@ -451,4 +535,18 @@ export async function fetchPurchaseSales(
 
   const result: PurchaseSalesResponse = await response.json();
   return result.data;
+}
+
+export async function getPurchaseSalesReportUrl(
+  startDate: Date,
+  endDate: Date,
+  status: PurchaseSalesStatus,
+): Promise<string> {
+  const baseUrl = await getIPAddress();
+  const params = new URLSearchParams({
+    startDate: formatDateParam(startDate),
+    endDate: formatDateParam(endDate),
+    status,
+  });
+  return `${baseUrl}/Report/GetPurchaseSalesReport?${params.toString()}`;
 }

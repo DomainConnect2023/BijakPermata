@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useCallback, useEffect, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -21,7 +23,11 @@ import { CollapsibleFilterSection } from "@/components/collapsible-filter-sectio
 import { ReportSectionSwitcher } from "@/components/report-section-switcher";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
-import { type DailyStockItem, fetchDailyStock } from "@/services/report-api";
+import {
+  type DailyStockItem,
+  fetchDailyStock,
+  getDailyStockReportUrl,
+} from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
 
@@ -57,6 +63,7 @@ export function DailyStockReportScreen() {
   const { loading: permissionLoading, access } = usePageAccess([
     "DailyBalance",
   ]);
+  const dailyNavigation = useNavigation("/(app)");
 
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
@@ -65,6 +72,7 @@ export function DailyStockReportScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadReport = useCallback(async (forDate: Date) => {
     setErrorMessage(null);
@@ -107,6 +115,41 @@ export function DailyStockReportScreen() {
   function handleDismiss() {
     setShowPicker(false);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getDailyStockReportUrl(date);
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [date]);
+
+  useLayoutEffect(() => {
+    dailyNavigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      dailyNavigation.setOptions({ headerRight: undefined });
+    };
+  }, [dailyNavigation, exporting, handleExport]);
 
   const totalBalanceRM = items.reduce((sum, item) => sum + item.balRM, 0);
 
@@ -351,6 +394,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   summaryCard: {
     flexDirection: "row",

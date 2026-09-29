@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
-import { useCallback, useEffect, useState } from "react";
+import { useNavigation } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +24,7 @@ import { Spacing } from "@/constants/theme";
 import {
   type CancelledTransactionItem,
   fetchSaleCancel,
+  getSaleCancelReportUrl,
 } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
@@ -77,6 +80,8 @@ function formatAmount(value: number): string {
 type ActivePicker = "from" | "to" | null;
 
 export function SaleCancelReportScreen() {
+  const sectionNavigation = useNavigation("/(app)");
+  const [exporting, setExporting] = useState(false);
   const [fromDate, setFromDate] = useState(() => daysAgo(30));
   const [toDate, setToDate] = useState(() => startOfDay(new Date()));
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
@@ -138,6 +143,44 @@ export function SaleCancelReportScreen() {
   function handleDismiss() {
     setActivePicker(null);
   }
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const url = await getSaleCancelReportUrl(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+      );
+      await Linking.openURL(url);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to export report",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [appliedFilters.fromDate, appliedFilters.toDate]);
+
+  useLayoutEffect(() => {
+    sectionNavigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={handleExport}
+          disabled={exporting}
+          style={styles.headerExportButton}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={BRAND_COLOR} />
+          ) : (
+            <Ionicons name="share-outline" size={22} color={BRAND_COLOR} />
+          )}
+        </Pressable>
+      ),
+    });
+    return () => {
+      sectionNavigation.setOptions({ headerRight: undefined });
+    };
+  }, [sectionNavigation, exporting, handleExport]);
 
   const totalRM = items.reduce((sum, item) => sum + item.rm, 0);
 
@@ -418,6 +461,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
+  },
+  headerExportButton: {
+    marginRight: Spacing.four,
+    padding: 4,
   },
   searchButton: {
     flexDirection: "row",
