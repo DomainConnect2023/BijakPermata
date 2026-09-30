@@ -1152,7 +1152,10 @@ export function DashboardScreen() {
                         }
                         style={[
                           styles.legendTile,
-                          isSelected && styles.legendRowSelected,
+                          isSelected && {
+                            backgroundColor: `${item.color}1A`,
+                            borderColor: item.color,
+                          },
                         ]}
                       >
                         <View style={styles.legendTileHeader}>
@@ -1165,6 +1168,13 @@ export function DashboardScreen() {
                           <Text style={styles.legendLabel} numberOfLines={1}>
                             {item.label}
                           </Text>
+                          {isSelected && (
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={14}
+                              color={item.color}
+                            />
+                          )}
                         </View>
                         <Text style={styles.legendValue} numberOfLines={1}>
                           {formatAmount(item.value)}
@@ -1976,10 +1986,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: Spacing.two,
     borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "transparent",
     gap: 2,
-  },
-  legendRowSelected: {
-    backgroundColor: "#F9FAFB",
   },
   legendTileHeader: {
     flexDirection: "row",
@@ -1995,16 +2004,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
+    color: "#000000",
   },
   legendValue: {
-    fontSize: 14,
-    color: "#4B5563",
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#000000",
   },
   legendPercent: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6B7280",
+    color: "#000000",
   },
   emptyChart: {
     alignItems: "center",
