@@ -3,7 +3,7 @@ import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
 import { useFocusEffect, useNavigation } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -25,7 +25,9 @@ import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
+import { useQuery } from "@/hooks/use-query";
 import {
+  formatDateParam,
   type DetailTransactionItem,
   type DetailTransactionStatus,
   fetchCurrencyList,
@@ -36,6 +38,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const BRAND_COLOR = "#208AEF";
+const OPTION_LIST_STALE_TIME_MS = 10 * 60_000;
 
 const STATUS_OPTIONS: { value: DetailTransactionStatus; label: string }[] = [
   { value: "ALL", label: "All" },
@@ -125,7 +128,6 @@ export function DetailTransactionReportScreen({
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(true);
 
-  const [currencies, setCurrencies] = useState<string[]>([]);
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
   const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const [currencySearch, setCurrencySearch] = useState("");
@@ -141,70 +143,53 @@ export function DetailTransactionReportScreen({
     amountHigh: Infinity,
   });
 
-  const [items, setItems] = useState<DetailTransactionItem[]>([]);
   // Draft amount inputs the user is editing; only take effect once committed
   // into appliedFilters via the Search button, same as dates.
   const [amountLowText, setAmountLowText] = useState("");
   const [amountHighText, setAmountHighText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await fetchCurrencyList();
-        setCurrencies(list.filter((code) => code && code.trim()));
-      } catch {
-        // Currency filter is optional; ignore load failure.
-      }
-    })();
-  }, []);
-
-  const loadReport = useCallback(
-    async (
-      from: Date,
-      to: Date,
-      currency: string | null,
-      status: DetailTransactionStatus,
-    ) => {
-      setErrorMessage(null);
-      try {
-        const data = await fetchDetailTransactions(from, to, currency, status);
-        setItems(data);
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : "Failed to load report",
-        );
-      }
-    },
-    [],
+  // Currency filter options rarely change; a load failure just leaves the
+  // filter list empty.
+  const { data: currencyData } = useQuery<string[]>(
+    "currencyList",
+    fetchCurrencyList,
+    { staleTimeMs: OPTION_LIST_STALE_TIME_MS },
+  );
+  const currencies = useMemo(
+    () => (currencyData ?? []).filter((code) => code && code.trim()),
+    [currencyData],
   );
 
-  useEffect(() => {
-    if (permissionLoading || !access.DetailTransaction) return;
-    (async () => {
-      setLoading(true);
-      await loadReport(
+  // Served from the shared query cache: filters seen before show their
+  // last result immediately and refresh in the background; changing
+  // filters cancels the previous request.
+  const {
+    data,
+    loading,
+    refreshing,
+    error: loadError,
+    refresh,
+  } = useQuery<DetailTransactionItem[]>(
+    !permissionLoading && access.DetailTransaction
+      ? `detailTransactions:${formatDateParam(appliedFilters.fromDate)}:${formatDateParam(appliedFilters.toDate)}:${appliedFilters.currency ?? ""}:${appliedFilters.status}`
+      : null,
+    (signal) =>
+      fetchDetailTransactions(
         appliedFilters.fromDate,
         appliedFilters.toDate,
         appliedFilters.currency,
         appliedFilters.status,
-      );
-      setLoading(false);
-    })();
-  }, [appliedFilters, loadReport, permissionLoading, access.DetailTransaction]);
+        signal,
+      ),
+  );
+  const items = useMemo(() => data ?? [], [data]);
+  const errorMessage = loadError ?? exportError;
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadReport(
-      appliedFilters.fromDate,
-      appliedFilters.toDate,
-      appliedFilters.currency,
-      appliedFilters.status,
-    );
-    setRefreshing(false);
-  }, [appliedFilters, loadReport]);
+    setExportError(null);
+    await refresh();
+  }, [refresh]);
 
   function applyFilters() {
     setAppliedFilters({
@@ -279,6 +264,7 @@ export function DetailTransactionReportScreen({
   }
 
   const handleExport = useCallback(async () => {
+    setExportError(null);
     setExporting(true);
     try {
       const url = await getDetailTransactionReportUrl(
@@ -289,7 +275,7 @@ export function DetailTransactionReportScreen({
       );
       await Linking.openURL(url);
     } catch (error) {
-      setErrorMessage(
+      setExportError(
         error instanceof Error ? error.message : "Failed to export report",
       );
     } finally {
@@ -613,14 +599,7 @@ export function DetailTransactionReportScreen({
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() =>
-              loadReport(
-                appliedFilters.fromDate,
-                appliedFilters.toDate,
-                appliedFilters.currency,
-                appliedFilters.status,
-              )
-            }
+            onPress={handleRefresh}
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />

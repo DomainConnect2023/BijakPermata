@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -14,8 +14,9 @@ import { AccessDeniedView } from "@/components/access-denied-view";
 import { BottomActionNav } from "@/components/bottom-action-nav";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
+import { useQuery } from "@/hooks/use-query";
 import {
-  type PurchaseSalesTransactionItem,
+  type PurchaseSalesGroup,
   fetchPurchaseSales,
   parseDateParam,
 } from "@/services/report-api";
@@ -60,44 +61,35 @@ export function SalesDetailTransactionsScreen({
     "SalesDetail",
   ]);
 
-  const [items, setItems] = useState<PurchaseSalesTransactionItem[]>([]);
-  const [totalFCAmount, setTotalFCAmount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const loadReport = useCallback(async () => {
-    setErrorMessage(null);
-    try {
-      const groups = await fetchPurchaseSales(
+  // Served from the shared query cache: filters seen before show their
+  // last result immediately and refresh in the background; changing
+  // filters cancels the previous request.
+  const {
+    data,
+    loading,
+    refreshing,
+    error: loadError,
+    refresh,
+  } = useQuery<PurchaseSalesGroup[]>(
+    !permissionLoading && access.SalesDetail
+      ? `purchaseSales:S:${fromDate}:${toDate}`
+      : null,
+    (signal) =>
+      fetchPurchaseSales(
         parseDateParam(fromDate),
         parseDateParam(toDate),
         "S",
-      );
-      const group = groups.find((g) => g.currency === currency);
-      setItems(group?.items ?? []);
-      setTotalFCAmount(group?.totalFCAmount ?? 0);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load report",
-      );
-    }
-  }, [currency, fromDate, toDate]);
-
-  useEffect(() => {
-    if (permissionLoading || !access.SalesDetail) return;
-    (async () => {
-      setLoading(true);
-      await loadReport();
-      setLoading(false);
-    })();
-  }, [loadReport, permissionLoading, access.SalesDetail]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadReport();
-    setRefreshing(false);
-  }, [loadReport]);
+        signal,
+      ),
+  );
+  const group = useMemo(
+    () => data?.find((g) => g.currency === currency),
+    [currency, data],
+  );
+  const items = useMemo(() => group?.items ?? [], [group]);
+  const totalFCAmount = group?.totalFCAmount ?? 0;
+  const errorMessage = loadError;
+  const handleRefresh = refresh;
 
   const totalRM = items.reduce((sum, item) => sum + item.rm, 0);
 
@@ -154,7 +146,7 @@ export function SalesDetailTransactionsScreen({
         <View style={styles.centerContent}>
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
-          <Pressable onPress={loadReport} style={styles.retryButton}>
+          <Pressable onPress={handleRefresh} style={styles.retryButton}>
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />
             <Text style={styles.retryText}>Retry</Text>
           </Pressable>

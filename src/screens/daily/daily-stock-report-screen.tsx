@@ -3,7 +3,7 @@ import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
 import { useNavigation } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -23,7 +23,9 @@ import { CollapsibleFilterSection } from "@/components/collapsible-filter-sectio
 import { ReportSectionSwitcher } from "@/components/report-section-switcher";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
+import { useQuery } from "@/hooks/use-query";
 import {
+  formatDateParam,
   type DailyStockItem,
   fetchDailyStock,
   getDailyStockReportUrl,
@@ -68,38 +70,32 @@ export function DailyStockReportScreen() {
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(true);
-  const [items, setItems] = useState<DailyStockItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const loadReport = useCallback(async (forDate: Date) => {
-    setErrorMessage(null);
-    try {
-      const data = await fetchDailyStock(forDate);
-      setItems(data);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load report",
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    if (permissionLoading || !access.DailyBalance) return;
-    (async () => {
-      setLoading(true);
-      await loadReport(date);
-      setLoading(false);
-    })();
-  }, [date, loadReport, permissionLoading, access.DailyBalance]);
+  // Served from the shared query cache: filters seen before show their
+  // last result immediately and refresh in the background; changing
+  // filters cancels the previous request.
+  const {
+    data,
+    loading,
+    refreshing,
+    error: loadError,
+    refresh,
+  } = useQuery<DailyStockItem[]>(
+    !permissionLoading && access.DailyBalance
+      ? `dailyStock:${formatDateParam(date)}`
+      : null,
+    (signal) =>
+      fetchDailyStock(date, signal),
+  );
+  const items = useMemo(() => data ?? [], [data]);
+  const errorMessage = loadError ?? exportError;
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadReport(date);
-    setRefreshing(false);
-  }, [date, loadReport]);
+    setExportError(null);
+    await refresh();
+  }, [refresh]);
 
   function handleValueChange(
     _event: DateTimePickerChangeEvent,
@@ -117,12 +113,13 @@ export function DailyStockReportScreen() {
   }
 
   const handleExport = useCallback(async () => {
+    setExportError(null);
     setExporting(true);
     try {
       const url = await getDailyStockReportUrl(date);
       await Linking.openURL(url);
     } catch (error) {
-      setErrorMessage(
+      setExportError(
         error instanceof Error ? error.message : "Failed to export report",
       );
     } finally {
@@ -328,7 +325,7 @@ export function DailyStockReportScreen() {
         <View style={styles.centerContent}>
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
-          <Pressable onPress={() => loadReport(date)} style={styles.retryButton}>
+          <Pressable onPress={handleRefresh} style={styles.retryButton}>
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />
             <Text style={styles.retryText}>Retry</Text>
           </Pressable>

@@ -1,4 +1,4 @@
-import { apiGet, getIPAddress } from "@/services/api-client";
+import { apiGet, getIPAddress, getReportData } from "@/services/api-client";
 
 export type DataRiskType = "LOW" | "MED" | "AVE" | "HIGH";
 
@@ -10,12 +10,16 @@ export type DataRiskItem = {
 export async function fetchDataRisk(
   startDate: Date,
   endDate: Date,
+  signal?: AbortSignal,
 ): Promise<DataRiskItem[]> {
   const params = new URLSearchParams({
     startDate: formatDateParam(startDate),
     endDate: formatDateParam(endDate),
   });
-  return apiGet<DataRiskItem[]>(`/Report/GetDataRisk?${params.toString()}`);
+  return apiGet<DataRiskItem[]>(
+    `/Report/GetDataRisk?${params.toString()}`,
+    signal,
+  );
 }
 
 export async function getDataRiskReportUrl(
@@ -61,24 +65,13 @@ export function parseDateParam(value: string): Date {
 
 export async function fetchDailyBalance(
   date: Date,
+  signal?: AbortSignal,
 ): Promise<DailyBalanceItem[]> {
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetDailyBalance?date=${formatDateParam(date)}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load daily balance report");
-  }
-
-  const result: DailyBalanceResponse = await response.json();
-  return result.data;
+  return getReportData<DailyBalanceResponse["data"]>(
+    `/Report/GetDailyBalance?date=${formatDateParam(date)}`,
+    "Failed to load daily balance report",
+    signal,
+  );
 }
 
 // Printable HTML report page — opened directly in the device's browser via
@@ -106,24 +99,15 @@ type DailyStockResponse = {
   data: DailyStockItem[];
 };
 
-export async function fetchDailyStock(date: Date): Promise<DailyStockItem[]> {
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetDailyStock?date=${formatDateParam(date)}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load daily stock report");
-  }
-
-  const result: DailyStockResponse = await response.json();
-  return result.data;
+export async function fetchDailyStock(
+  date: Date,
+  signal?: AbortSignal,
+): Promise<DailyStockItem[]> {
+  return getReportData<DailyStockResponse["data"]>(
+    `/Report/GetDailyStock?date=${formatDateParam(date)}`,
+    "Failed to load daily stock report",
+    signal,
+  );
 }
 
 export async function getDailyStockReportUrl(date: Date): Promise<string> {
@@ -155,6 +139,7 @@ type MarginProfitResponse = {
 export async function fetchMarginProfit(
   fromDate: Date,
   toDate: Date,
+  signal?: AbortSignal,
 ): Promise<MarginProfitItem[]> {
   // The backend's `dateTo`/`dateFrom` query params are swapped relative to
   // their names: `dateTo` is actually the range start and `dateFrom` the
@@ -164,23 +149,11 @@ export async function fetchMarginProfit(
     dateFrom: formatDateParam(toDate),
   });
 
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetMarginProfit?${params.toString()}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load margin report");
-  }
-
-  const result: MarginProfitResponse = await response.json();
-  return result.data;
+  return getReportData<MarginProfitResponse["data"]>(
+    `/Report/GetMarginProfit?${params.toString()}`,
+    "Failed to load margin report",
+    signal,
+  );
 }
 
 export async function getMarginProfitReportUrl(
@@ -196,8 +169,13 @@ export async function getMarginProfitReportUrl(
   return `${baseUrl}/Report/GetMarginProfitReport?${params.toString()}`;
 }
 
-export async function fetchCurrencyList(): Promise<string[]> {
-  const result = await apiGet<{ code: string }[]>("/Report/GetCurrency");
+export async function fetchCurrencyList(
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const result = await apiGet<{ code: string }[]>(
+    "/Report/GetCurrency",
+    signal,
+  );
   return result.map((item) => item.code);
 }
 
@@ -245,6 +223,7 @@ export async function fetchDetailTransactions(
   endDate: Date,
   currency: string | null,
   status: DetailTransactionStatus = "ALL",
+  signal?: AbortSignal,
 ): Promise<DetailTransactionItem[]> {
   const params = new URLSearchParams({
     startDate: formatDateParam(startDate),
@@ -253,23 +232,11 @@ export async function fetchDetailTransactions(
   });
   if (currency) params.set("currency", currency);
 
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetDetailTransaction?${params.toString()}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load detail transaction report");
-  }
-
-  const result: DetailTransactionResponse = await response.json();
-  return result.data;
+  return getReportData<DetailTransactionResponse["data"]>(
+    `/Report/GetDetailTransaction?${params.toString()}`,
+    "Failed to load detail transaction report",
+    signal,
+  );
 }
 
 export async function getDetailTransactionReportUrl(
@@ -343,29 +310,18 @@ type CancelledTransactionResponse = {
 export async function fetchBuyCancel(
   startDate: Date,
   endDate: Date,
+  signal?: AbortSignal,
 ): Promise<CancelledTransactionItem[]> {
   const params = new URLSearchParams({
     startDate: formatDateParam(startDate),
     endDate: formatDateParam(endDate),
   });
 
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetBuyCancel?${params.toString()}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load buy cancel report");
-  }
-
-  const result: CancelledTransactionResponse = await response.json();
-  return result.data;
+  return getReportData<CancelledTransactionResponse["data"]>(
+    `/Report/GetBuyCancel?${params.toString()}`,
+    "Failed to load buy cancel report",
+    signal,
+  );
 }
 
 export async function getBuyCancelReportUrl(
@@ -383,29 +339,18 @@ export async function getBuyCancelReportUrl(
 export async function fetchSaleCancel(
   startDate: Date,
   endDate: Date,
+  signal?: AbortSignal,
 ): Promise<CancelledTransactionItem[]> {
   const params = new URLSearchParams({
     startDate: formatDateParam(startDate),
     endDate: formatDateParam(endDate),
   });
 
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetSaleCancel?${params.toString()}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load sale cancel report");
-  }
-
-  const result: CancelledTransactionResponse = await response.json();
-  return result.data;
+  return getReportData<CancelledTransactionResponse["data"]>(
+    `/Report/GetSaleCancel?${params.toString()}`,
+    "Failed to load sale cancel report",
+    signal,
+  );
 }
 
 export async function getSaleCancelReportUrl(
@@ -439,6 +384,7 @@ export async function fetchExpensesListing(
   startDate: Date,
   endDate: Date,
   glCode?: string | null,
+  signal?: AbortSignal,
 ): Promise<ExpensesListingItem[]> {
   const params = new URLSearchParams({
     startDate: formatDateParam(startDate),
@@ -446,23 +392,11 @@ export async function fetchExpensesListing(
   });
   if (glCode) params.set("glCode", glCode);
 
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetExpensesListing?${params.toString()}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load expenses listing report");
-  }
-
-  const result: ExpensesListingResponse = await response.json();
-  return result.data;
+  return getReportData<ExpensesListingResponse["data"]>(
+    `/Report/GetExpensesListing?${params.toString()}`,
+    "Failed to load expenses listing report",
+    signal,
+  );
 }
 
 export async function getExpensesListingReportUrl(
@@ -488,29 +422,21 @@ type GLCodeResponse = {
   data: GLCodeItem[];
 };
 
-export async function fetchExpensesGLCodes(): Promise<GLCodeItem[]> {
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(`${baseUrl}/Report/GetExpensesGLCode`, {
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load GL code list");
-  }
-
-  const result: GLCodeResponse = await response.json();
-  return result.data;
+export async function fetchExpensesGLCodes(
+  signal?: AbortSignal,
+): Promise<GLCodeItem[]> {
+  return getReportData<GLCodeResponse["data"]>(
+    `/Report/GetExpensesGLCode`,
+    "Failed to load GL code list",
+    signal,
+  );
 }
 
 export async function fetchPurchaseSales(
   startDate: Date,
   endDate: Date,
   status: PurchaseSalesStatus,
+  signal?: AbortSignal,
 ): Promise<PurchaseSalesGroup[]> {
   const params = new URLSearchParams({
     startDate: formatDateParam(startDate),
@@ -518,23 +444,11 @@ export async function fetchPurchaseSales(
     status,
   });
 
-  let response: Response;
-  try {
-    const baseUrl = await getIPAddress();
-    response = await fetch(
-      `${baseUrl}/Report/GetPurchaseSales?${params.toString()}`,
-      { headers: { "Content-Type": "application/json" } },
-    );
-  } catch {
-    throw new Error("Unable to connect to the server. Please try again.");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load purchase report");
-  }
-
-  const result: PurchaseSalesResponse = await response.json();
-  return result.data;
+  return getReportData<PurchaseSalesResponse["data"]>(
+    `/Report/GetPurchaseSales?${params.toString()}`,
+    "Failed to load purchase report",
+    signal,
+  );
 }
 
 export async function getPurchaseSalesReportUrl(

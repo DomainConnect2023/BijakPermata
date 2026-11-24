@@ -4,7 +4,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -20,13 +20,17 @@ import { LineChart, PieChart } from "react-native-gifted-charts";
 
 import { BottomActionNav } from "@/components/bottom-action-nav";
 import { Spacing } from "@/constants/theme";
+import { useQuery } from "@/hooks/use-query";
 import {
   type BalanceChartItem,
   type DashboardData,
   type ProfitChartItem,
+  dailyDashboardQueryKey,
   fetchDashboard,
   fetchDashboardByMonth,
   fetchDashboardByYear,
+  monthlyDashboardQueryKey,
+  yearlyDashboardQueryKey,
 } from "@/services/dashboard-api";
 import { type DataRiskType, formatDateParam } from "@/services/report-api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -291,7 +295,6 @@ export function DashboardScreen() {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
 
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [selectedCurrencyIndex, setSelectedCurrencyIndex] = useState<
     number | null
   >(null);
@@ -301,54 +304,34 @@ export function DashboardScreen() {
   const [profitViewMode, setProfitViewMode] = useState<"profit" | "margin">(
     "profit",
   );
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const loadDashboard = useCallback(
-    async (
-      tab: DashboardTab,
-      filters: {
-        dailyDate: Date;
-        monthYear: { year: number; month: number };
-        year: number;
-      },
-    ) => {
-      setErrorMessage(null);
-      try {
-        const data =
-          tab === "daily"
-            ? await fetchDashboard(filters.dailyDate)
-            : tab === "monthly"
-              ? await fetchDashboardByMonth(
-                  filters.monthYear.year,
-                  filters.monthYear.month,
-                )
-              : await fetchDashboardByYear(filters.year);
-        setDashboard(data);
-        setSelectedCurrencyIndex(null);
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : "Failed to load dashboard",
-        );
-      }
-    },
-    [],
+  // Cached per tab + period: switching back to a tab/period seen before
+  // shows it immediately while it refreshes in the background.
+  const dashboardQueryKey =
+    activeTab === "daily"
+      ? dailyDashboardQueryKey(dailyDate)
+      : activeTab === "monthly"
+        ? monthlyDashboardQueryKey(monthYear.year, monthYear.month)
+        : yearlyDashboardQueryKey(year);
+  const {
+    data: dashboard,
+    loading,
+    refreshing,
+    error: errorMessage,
+    refresh: handleRefresh,
+  } = useQuery<DashboardData>(dashboardQueryKey, (signal) =>
+    activeTab === "daily"
+      ? fetchDashboard(dailyDate, signal)
+      : activeTab === "monthly"
+        ? fetchDashboardByMonth(monthYear.year, monthYear.month, signal)
+        : fetchDashboardByYear(year, signal),
   );
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await loadDashboard(activeTab, { dailyDate, monthYear, year });
-      setLoading(false);
-    })();
-  }, [activeTab, dailyDate, monthYear, year, loadDashboard]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadDashboard(activeTab, { dailyDate, monthYear, year });
-    setRefreshing(false);
-  }, [activeTab, dailyDate, monthYear, year, loadDashboard]);
+  // Clear the selected donut slice whenever different data is shown.
+  const [selectionSource, setSelectionSource] = useState(dashboard);
+  if (selectionSource !== dashboard) {
+    setSelectionSource(dashboard);
+    setSelectedCurrencyIndex(null);
+  }
 
   function getDrillDownRange(): { from: Date; to: Date } {
     if (activeTab === "monthly")
@@ -897,9 +880,7 @@ export function DashboardScreen() {
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() =>
-              loadDashboard(activeTab, { dailyDate, monthYear, year })
-            }
+            onPress={handleRefresh}
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />

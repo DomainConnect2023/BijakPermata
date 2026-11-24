@@ -4,8 +4,13 @@ import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
+import { getIPAddress } from '@/services/api-client';
 
 SplashScreen.preventAutoHideAsync();
+
+// Resolve the API server address while the splash/login screen is showing,
+// so the first real request doesn't pay for the lookup.
+getIPAddress().catch(() => {});
 
 function RootNavigator() {
   const { isAuthenticated } = useAuth();

@@ -3,7 +3,7 @@ import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -24,6 +24,7 @@ import { CollapsibleFilterSection } from "@/components/collapsible-filter-sectio
 import { ReportSectionSwitcher } from "@/components/report-section-switcher";
 import { Spacing } from "@/constants/theme";
 import { usePageAccess } from "@/hooks/use-page-access";
+import { useQuery } from "@/hooks/use-query";
 import {
   type PurchaseSalesGroup,
   fetchPurchaseSales,
@@ -112,44 +113,48 @@ export function PurchaseDetailReportScreen({
     amountHigh: Infinity,
   });
 
-  const [groups, setGroups] = useState<PurchaseSalesGroup[]>([]);
   // Draft amount inputs the user is editing; only take effect once committed
   // into appliedFilters via the Search button, same as dates.
   const [amountLowText, setAmountLowText] = useState("");
   const [amountHighText, setAmountHighText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  const loadReport = useCallback(async (from: Date, to: Date) => {
-    setErrorMessage(null);
-    try {
-      const data = await fetchPurchaseSales(from, to, "B");
-      const filtered = data.filter(
-        (group) => group.currency && group.currency !== "0",
-      );
-      setGroups(filtered);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load report",
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    if (permissionLoading || !access.PurchaseDetail) return;
-    (async () => {
-      setLoading(true);
-      await loadReport(appliedFilters.fromDate, appliedFilters.toDate);
-      setLoading(false);
-    })();
-  }, [appliedFilters, loadReport, permissionLoading, access.PurchaseDetail]);
+  // Served from the shared query cache: filters seen before show their
+  // last result immediately and refresh in the background; changing
+  // filters cancels the previous request.
+  const {
+    data,
+    loading,
+    refreshing,
+    error: loadError,
+    refresh,
+  } = useQuery<PurchaseSalesGroup[]>(
+    !permissionLoading && access.PurchaseDetail
+      ? `purchaseSales:B:${formatDateParam(appliedFilters.fromDate)}:${formatDateParam(appliedFilters.toDate)}`
+      : null,
+    (signal) =>
+      fetchPurchaseSales(
+        appliedFilters.fromDate,
+        appliedFilters.toDate,
+        "B",
+        signal,
+      ),
+  );
+  const groups = useMemo(
+    () =>
+      data
+        ? data.filter(
+          (group) => group.currency && group.currency !== "0",
+        )
+        : [],
+    [data],
+  );
+  const errorMessage = loadError ?? exportError;
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadReport(appliedFilters.fromDate, appliedFilters.toDate);
-    setRefreshing(false);
-  }, [appliedFilters, loadReport]);
+    setExportError(null);
+    await refresh();
+  }, [refresh]);
 
   function applyFilters() {
     setAppliedFilters({
@@ -218,6 +223,7 @@ export function PurchaseDetailReportScreen({
   }
 
   const handleExport = useCallback(async () => {
+    setExportError(null);
     setExporting(true);
     try {
       const url = await getPurchaseSalesReportUrl(
@@ -227,7 +233,7 @@ export function PurchaseDetailReportScreen({
       );
       await Linking.openURL(url);
     } catch (error) {
-      setErrorMessage(
+      setExportError(
         error instanceof Error ? error.message : "Failed to export report",
       );
     } finally {
@@ -438,9 +444,7 @@ export function PurchaseDetailReportScreen({
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() =>
-              loadReport(appliedFilters.fromDate, appliedFilters.toDate)
-            }
+            onPress={handleRefresh}
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />

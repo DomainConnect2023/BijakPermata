@@ -3,7 +3,7 @@ import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
 import { useNavigation } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -21,7 +21,9 @@ import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { ReportSectionSwitcher } from "@/components/report-section-switcher";
 import { Spacing } from "@/constants/theme";
+import { useQuery } from "@/hooks/use-query";
 import {
+  formatDateParam,
   type CancelledTransactionItem,
   fetchSaleCancel,
   getSaleCancelReportUrl,
@@ -88,36 +90,29 @@ export function SaleCancelReportScreen() {
   const [filtersExpanded, setFiltersExpanded] = useState(true);
 
   const [appliedFilters, setAppliedFilters] = useState({ fromDate, toDate });
-  const [items, setItems] = useState<CancelledTransactionItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  const loadReport = useCallback(async (from: Date, to: Date) => {
-    setErrorMessage(null);
-    try {
-      const data = await fetchSaleCancel(from, to);
-      setItems(data);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to load report",
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await loadReport(appliedFilters.fromDate, appliedFilters.toDate);
-      setLoading(false);
-    })();
-  }, [appliedFilters, loadReport]);
+  // Served from the shared query cache: filters seen before show their
+  // last result immediately and refresh in the background; changing
+  // filters cancels the previous request.
+  const {
+    data,
+    loading,
+    refreshing,
+    error: loadError,
+    refresh,
+  } = useQuery<CancelledTransactionItem[]>(
+    `saleCancel:${formatDateParam(appliedFilters.fromDate)}:${formatDateParam(appliedFilters.toDate)}`,
+    (signal) =>
+      fetchSaleCancel(appliedFilters.fromDate, appliedFilters.toDate, signal),
+  );
+  const items = useMemo(() => data ?? [], [data]);
+  const errorMessage = loadError ?? exportError;
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadReport(appliedFilters.fromDate, appliedFilters.toDate);
-    setRefreshing(false);
-  }, [appliedFilters, loadReport]);
+    setExportError(null);
+    await refresh();
+  }, [refresh]);
 
   function applyFilters() {
     setAppliedFilters({ fromDate, toDate });
@@ -145,6 +140,7 @@ export function SaleCancelReportScreen() {
   }
 
   const handleExport = useCallback(async () => {
+    setExportError(null);
     setExporting(true);
     try {
       const url = await getSaleCancelReportUrl(
@@ -153,7 +149,7 @@ export function SaleCancelReportScreen() {
       );
       await Linking.openURL(url);
     } catch (error) {
-      setErrorMessage(
+      setExportError(
         error instanceof Error ? error.message : "Failed to export report",
       );
     } finally {
@@ -314,9 +310,7 @@ export function SaleCancelReportScreen() {
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() =>
-              loadReport(appliedFilters.fromDate, appliedFilters.toDate)
-            }
+            onPress={handleRefresh}
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />

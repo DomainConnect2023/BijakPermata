@@ -36,21 +36,42 @@ export type DashboardData = {
   dataRiskChart: DataRiskItem[];
 };
 
-export async function fetchDashboard(date: Date): Promise<DashboardData> {
-  return apiGet<DashboardData>(`/Api/Dashboard?date=${formatDateParam(date)}`);
+export async function fetchDashboard(
+  date: Date,
+  signal?: AbortSignal,
+): Promise<DashboardData> {
+  return apiGet<DashboardData>(
+    `/Api/Dashboard?date=${formatDateParam(date)}`,
+    signal,
+  );
 }
 
 export async function fetchDashboardByMonth(
   year: number,
   month: number,
+  signal?: AbortSignal,
 ): Promise<DashboardData> {
   return apiGet<DashboardData>(
     `/Api/DashboardByMonth?year=${year}&month=${month}`,
+    signal,
   );
 }
 
 export async function fetchDashboardByYear(
   year: number,
+  signal?: AbortSignal,
 ): Promise<DashboardData> {
-  return apiGet<DashboardData>(`/Api/DashboardByYear?year=${year}`);
+  return apiGet<DashboardData>(`/Api/DashboardByYear?year=${year}`, signal);
+}
+
+export function dailyDashboardQueryKey(date: Date): string {
+  return `dashboard:daily:${formatDateParam(date)}`;
+}
+
+export function monthlyDashboardQueryKey(year: number, month: number): string {
+  return `dashboard:monthly:${year}-${month}`;
+}
+
+export function yearlyDashboardQueryKey(year: number): string {
+  return `dashboard:yearly:${year}`;
 }

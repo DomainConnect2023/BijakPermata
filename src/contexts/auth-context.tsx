@@ -6,8 +6,24 @@ import {
   type PropsWithChildren,
 } from "react";
 
+import { prefetchAllPageAccess } from "@/services/access-api";
 import { loginRequest, type LoginResult } from "@/services/auth-api";
+import {
+  dailyDashboardQueryKey,
+  fetchDashboard,
+} from "@/services/dashboard-api";
+import { clearQueryCache, prefetchQuery } from "@/services/query-cache";
 import { updateUser } from "@/services/user-api";
+
+// Starts the requests the first screens after login need while the app is
+// still navigating there: every page permission and today's dashboard.
+function prefetchAfterLogin(userId: number) {
+  prefetchAllPageAccess(userId);
+  const today = new Date();
+  prefetchQuery(dailyDashboardQueryKey(today), (signal) =>
+    fetchDashboard(today, signal),
+  );
+}
 
 type AuthContextValue = {
   isAuthenticated: boolean;
@@ -36,9 +52,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
           throw new Error("Unable to connect to the server. Please try again.");
         }
 
+        clearQueryCache();
+        prefetchAfterLogin(result.userId);
         setUser(result);
       },
-      logout: () => setUser(null),
+      logout: () => {
+        clearQueryCache();
+        setUser(null);
+      },
       updateProfile: async (usercode, username) => {
         if (!user) {
           throw new Error("You must be logged in to update your profile.");

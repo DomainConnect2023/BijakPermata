@@ -3,7 +3,7 @@ import DateTimePicker, {
   type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
 import { useNavigation } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -23,7 +23,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomActionNav } from "@/components/bottom-action-nav";
 import { CollapsibleFilterSection } from "@/components/collapsible-filter-section";
 import { Spacing } from "@/constants/theme";
+import { useQuery } from "@/hooks/use-query";
 import {
+  formatDateParam,
   type ExpensesListingItem,
   type GLCodeItem,
   fetchExpensesGLCodes,
@@ -33,6 +35,7 @@ import {
 } from "@/services/report-api";
 
 const BRAND_COLOR = "#208AEF";
+const OPTION_LIST_STALE_TIME_MS = 10 * 60_000;
 
 function startOfDay(date: Date): Date {
   const result = new Date(date);
@@ -92,7 +95,6 @@ export function ExpenseListingScreen({
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(true);
 
-  const [glCodes, setGLCodes] = useState<GLCodeItem[]>([]);
   const [selectedGLCode, setSelectedGLCode] = useState<string | null>(null);
   const [glCodeModalVisible, setGLCodeModalVisible] = useState(false);
   const [glCodeSearch, setGLCodeSearch] = useState("");
@@ -102,58 +104,43 @@ export function ExpenseListingScreen({
     toDate,
     glCode: selectedGLCode,
   });
-  const [items, setItems] = useState<ExpensesListingItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await fetchExpensesGLCodes();
-        setGLCodes(list);
-      } catch {
-        // GL code filter is optional; ignore load failure.
-      }
-    })();
-  }, []);
-
-  const loadReport = useCallback(
-    async (from: Date, to: Date, glCode: string | null) => {
-      setErrorMessage(null);
-      try {
-        const data = await fetchExpensesListing(from, to, glCode);
-        setItems(data);
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : "Failed to load report",
-        );
-      }
-    },
-    [],
+  // GL code filter options rarely change; a load failure just leaves the
+  // filter list empty.
+  const { data: glCodeData } = useQuery<GLCodeItem[]>(
+    "expenseGLCodes",
+    fetchExpensesGLCodes,
+    { staleTimeMs: OPTION_LIST_STALE_TIME_MS },
   );
+  const glCodes = useMemo(() => glCodeData ?? [], [glCodeData]);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await loadReport(
+  // Served from the shared query cache: filters seen before show their
+  // last result immediately and refresh in the background; changing
+  // filters cancels the previous request.
+  const {
+    data,
+    loading,
+    refreshing,
+    error: loadError,
+    refresh,
+  } = useQuery<ExpensesListingItem[]>(
+    `expenses:${formatDateParam(appliedFilters.fromDate)}:${formatDateParam(appliedFilters.toDate)}:${appliedFilters.glCode ?? ""}`,
+    (signal) =>
+      fetchExpensesListing(
         appliedFilters.fromDate,
         appliedFilters.toDate,
         appliedFilters.glCode,
-      );
-      setLoading(false);
-    })();
-  }, [appliedFilters, loadReport]);
+        signal,
+      ),
+  );
+  const items = useMemo(() => data ?? [], [data]);
+  const errorMessage = loadError ?? exportError;
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadReport(
-      appliedFilters.fromDate,
-      appliedFilters.toDate,
-      appliedFilters.glCode,
-    );
-    setRefreshing(false);
-  }, [appliedFilters, loadReport]);
+    setExportError(null);
+    await refresh();
+  }, [refresh]);
 
   function applyFilters() {
     setAppliedFilters({ fromDate, toDate, glCode: selectedGLCode });
@@ -214,6 +201,7 @@ export function ExpenseListingScreen({
   }
 
   const handleExport = useCallback(async () => {
+    setExportError(null);
     setExporting(true);
     try {
       const url = await getExpensesListingReportUrl(
@@ -223,7 +211,7 @@ export function ExpenseListingScreen({
       );
       await Linking.openURL(url);
     } catch (error) {
-      setErrorMessage(
+      setExportError(
         error instanceof Error ? error.message : "Failed to export report",
       );
     } finally {
@@ -483,13 +471,7 @@ export function ExpenseListingScreen({
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{errorMessage}</Text>
           <Pressable
-            onPress={() =>
-              loadReport(
-                appliedFilters.fromDate,
-                appliedFilters.toDate,
-                appliedFilters.glCode,
-              )
-            }
+            onPress={handleRefresh}
             style={styles.retryButton}
           >
             <Ionicons name="refresh-outline" size={18} color={BRAND_COLOR} />
