@@ -1,0 +1,643 @@
+{
+  "info": {
+    "_postman_id": "b1a3c2d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "name": "BijakPermata API",
+    "description": "All backend endpoints called by the BijakPermata mobile app (reverse-engineered from src/services/*.ts).\n\nNotes:\n- There is NO Authorization/Bearer token anywhere in this app. Every request only sends `Content-Type: application/json`.\n- The real base URL is resolved at runtime via the external `Bootstrap` request in this collection (GetIP). Set the `baseUrl` collection variable to whatever that returns, or to the fallback `https://bijakpermatadev.domainsb.com.my`.\n- Most `/Api/*` endpoints return an envelope `{ isSuccess, message, data }`. The `/Report/*` endpoints use their own ad-hoc shapes (e.g. `{ date, data }`, `{ startDate, endDate, data }`) and just check `response.ok`.\n- `GetPageAccess` is the one exception that returns a bare boolean, not an envelope.\n- Each report has a sibling `...Report` endpoint that returns a printable HTML page (opened in-browser for viewing/printing/export), not JSON.\n- `GetMarginProfit` / `GetMarginProfitReport`: the backend's `dateTo`/`dateFrom` query params are swapped relative to their names — `dateTo` is actually the range start and `dateFrom` is the range end.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://bijakpermatadev.domainsb.com.my", "type": "string" },
+    { "key": "userId", "value": "1", "type": "string" },
+    { "key": "accessId", "value": "1", "type": "string" },
+    { "key": "date", "value": "2026-11-03", "type": "string" },
+    { "key": "startDate", "value": "2026-11-01", "type": "string" },
+    { "key": "endDate", "value": "2026-11-03", "type": "string" },
+    { "key": "year", "value": "2026", "type": "string" },
+    { "key": "month", "value": "11", "type": "string" },
+    { "key": "currency", "value": "USD", "type": "string" },
+    { "key": "glCode", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "0. Bootstrap",
+      "item": [
+        {
+          "name": "Get Server IP (license/host resolver)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "https://domainmobile.domainsb.com.my/Api/GetIP?packageName=com.bijakpermata&branch=",
+              "protocol": "https",
+              "host": ["domainmobile", "domainsb", "com", "my"],
+              "path": ["Api", "GetIP"],
+              "query": [
+                { "key": "packageName", "value": "com.bijakpermata" },
+                { "key": "branch", "value": "" }
+              ]
+            },
+            "description": "External host-resolution service (not the app backend). Returns `{ isSuccess, ipAddress }`. The app uses `ipAddress` as the base URL for every request below; falls back to the `baseUrl` variable's default if this fails."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"UserCode\": \"USER01\",\n  \"Password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Api/Login",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "Login"]
+            },
+            "description": "Response: `{ isSuccess, message, data: { userId, userName, code } }`. No token is returned or stored; the app just keeps this in memory for the session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Dashboard",
+      "item": [
+        {
+          "name": "Dashboard (by date)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/Api/Dashboard?date={{date}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "Dashboard"],
+              "query": [{ "key": "date", "value": "{{date}}" }]
+            }
+          }
+        },
+        {
+          "name": "Dashboard By Month",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/Api/DashboardByMonth?year={{year}}&month={{month}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "DashboardByMonth"],
+              "query": [
+                { "key": "year", "value": "{{year}}" },
+                { "key": "month", "value": "{{month}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Dashboard By Year",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/Api/DashboardByYear?year={{year}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "DashboardByYear"],
+              "query": [{ "key": "year", "value": "{{year}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Access Control",
+      "item": [
+        {
+          "name": "Get Access List",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/Api/GetAccessList",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "GetAccessList"]
+            }
+          }
+        },
+        {
+          "name": "Get Access User List",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/Api/GetAccessUserList?accessId={{accessId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "GetAccessUserList"],
+              "query": [{ "key": "accessId", "value": "{{accessId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update Access Users",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"AccessId\": 1,\n  \"UserIds\": [1, 2, 3]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Api/UpdateAccessUsers",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "UpdateAccessUsers"]
+            }
+          }
+        },
+        {
+          "name": "Get Page Access",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/Api/GetPageAccess?UserId={{userId}}&AccessId={{accessId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "GetPageAccess"],
+              "query": [
+                { "key": "UserId", "value": "{{userId}}" },
+                { "key": "AccessId", "value": "{{accessId}}" }
+              ]
+            },
+            "description": "NOTE: returns a bare boolean (`true`/`false`), not the usual `{isSuccess,message,data}` envelope."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. User Management",
+      "item": [
+        {
+          "name": "Get User List",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/Api/GetUserList",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "GetUserList"]
+            }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"UserCode\": \"USER02\",\n  \"UserName\": \"New User\",\n  \"Password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Api/CreateUser",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "CreateUser"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"UserId\": 1,\n  \"UserCode\": \"USER01\",\n  \"UserName\": \"Updated Name\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Api/UpdateUser",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "UpdateUser"]
+            },
+            "description": "Also used by the Edit Profile screen for the logged-in user."
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"UserId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Api/DeleteUser",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "DeleteUser"]
+            }
+          }
+        },
+        {
+          "name": "Update Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"UserId\": 1,\n  \"OldPassword\": \"oldpass\",\n  \"NewPassword\": \"newpass\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Api/UpdatePassword",
+              "host": ["{{baseUrl}}"],
+              "path": ["Api", "UpdatePassword"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Reports",
+      "item": [
+        {
+          "name": "Data Risk",
+          "item": [
+            {
+              "name": "Get Data Risk (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDataRisk?startDate={{startDate}}&endDate={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDataRisk"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Data Risk Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDataRiskReport?startDate={{startDate}}&endDate={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDataRiskReport"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Daily Balance",
+          "item": [
+            {
+              "name": "Get Daily Balance (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDailyBalance?date={{date}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDailyBalance"],
+                  "query": [{ "key": "date", "value": "{{date}}" }]
+                }
+              }
+            },
+            {
+              "name": "Get Daily Balance Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDailyBalanceReport?date={{date}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDailyBalanceReport"],
+                  "query": [{ "key": "date", "value": "{{date}}" }]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Daily Stock",
+          "item": [
+            {
+              "name": "Get Daily Stock (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDailyStock?date={{date}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDailyStock"],
+                  "query": [{ "key": "date", "value": "{{date}}" }]
+                }
+              }
+            },
+            {
+              "name": "Get Daily Stock Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDailyStockReport?date={{date}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDailyStockReport"],
+                  "query": [{ "key": "date", "value": "{{date}}" }]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Margin Profit",
+          "item": [
+            {
+              "name": "Get Margin Profit (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetMarginProfit?dateTo={{startDate}}&dateFrom={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetMarginProfit"],
+                  "query": [
+                    { "key": "dateTo", "value": "{{startDate}}" },
+                    { "key": "dateFrom", "value": "{{endDate}}" }
+                  ]
+                },
+                "description": "`dateTo` = range start, `dateFrom` = range end (swapped vs. their names server-side)."
+              }
+            },
+            {
+              "name": "Get Margin Profit Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetMarginProfitReport?dateTo={{startDate}}&dateFrom={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetMarginProfitReport"],
+                  "query": [
+                    { "key": "dateTo", "value": "{{startDate}}" },
+                    { "key": "dateFrom", "value": "{{endDate}}" }
+                  ]
+                },
+                "description": "`dateTo` = range start, `dateFrom` = range end (swapped vs. their names server-side)."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Currency Lookup",
+          "item": [
+            {
+              "name": "Get Currency List",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetCurrency",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetCurrency"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail Transactions",
+          "item": [
+            {
+              "name": "Get Detail Transaction (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDetailTransaction?startDate={{startDate}}&endDate={{endDate}}&status=ALL&currency={{currency}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDetailTransaction"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" },
+                    { "key": "status", "value": "ALL", "description": "ALL | B | S" },
+                    { "key": "currency", "value": "{{currency}}", "disabled": true, "description": "optional" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Detail Transaction Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetDetailTransactionReport?startDate={{startDate}}&endDate={{endDate}}&status=ALL&currency={{currency}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetDetailTransactionReport"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" },
+                    { "key": "status", "value": "ALL", "description": "ALL | B | S" },
+                    { "key": "currency", "value": "{{currency}}", "disabled": true, "description": "optional" }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Purchase & Sales",
+          "item": [
+            {
+              "name": "Get Purchase Sales - Buy (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetPurchaseSales?startDate={{startDate}}&endDate={{endDate}}&status=B",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetPurchaseSales"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" },
+                    { "key": "status", "value": "B", "description": "B (purchase) | S (sales)" }
+                  ]
+                },
+                "description": "Used by the Purchase Detail Report screen (status=B)."
+              }
+            },
+            {
+              "name": "Get Purchase Sales - Sell (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetPurchaseSales?startDate={{startDate}}&endDate={{endDate}}&status=S",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetPurchaseSales"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" },
+                    { "key": "status", "value": "S", "description": "B (purchase) | S (sales)" }
+                  ]
+                },
+                "description": "Used by the Sales Detail Report screen (status=S)."
+              }
+            },
+            {
+              "name": "Get Purchase Sales Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetPurchaseSalesReport?startDate={{startDate}}&endDate={{endDate}}&status=B",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetPurchaseSalesReport"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" },
+                    { "key": "status", "value": "B", "description": "B (purchase) | S (sales)" }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buy Cancel",
+          "item": [
+            {
+              "name": "Get Buy Cancel (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetBuyCancel?startDate={{startDate}}&endDate={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetBuyCancel"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Buy Cancel Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetBuyCancelReport?startDate={{startDate}}&endDate={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetBuyCancelReport"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sale Cancel",
+          "item": [
+            {
+              "name": "Get Sale Cancel (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetSaleCancel?startDate={{startDate}}&endDate={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetSaleCancel"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Sale Cancel Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetSaleCancelReport?startDate={{startDate}}&endDate={{endDate}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetSaleCancelReport"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Expenses",
+          "item": [
+            {
+              "name": "Get Expenses Listing (JSON)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetExpensesListing?startDate={{startDate}}&endDate={{endDate}}&glCode={{glCode}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetExpensesListing"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" },
+                    { "key": "glCode", "value": "{{glCode}}", "disabled": true, "description": "optional" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Expenses Listing Report (HTML/Print)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetExpensesListingReport?startDate={{startDate}}&endDate={{endDate}}&glCode={{glCode}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetExpensesListingReport"],
+                  "query": [
+                    { "key": "startDate", "value": "{{startDate}}" },
+                    { "key": "endDate", "value": "{{endDate}}" },
+                    { "key": "glCode", "value": "{{glCode}}", "disabled": true, "description": "optional" }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Expenses GL Code List",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/Report/GetExpensesGLCode",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["Report", "GetExpensesGLCode"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

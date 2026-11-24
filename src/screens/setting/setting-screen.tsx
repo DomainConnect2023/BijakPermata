@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -211,7 +212,7 @@ export function SettingScreen() {
         </Pressable>
 
         {/* 版本信息 */}
-        <Text style={styles.versionText}>Version 1.0.0</Text>
+        <Text style={styles.versionText}>Version {Constants.expoConfig?.version}</Text>
       </ScrollView>
     </View>
   );

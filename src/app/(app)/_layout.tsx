@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { Image } from "expo-image";
 import { Drawer } from "expo-router/drawer";
 import { useState } from "react";
@@ -110,7 +111,7 @@ function CustomDrawerContent({ navigation, state, ...props }: any) {
         </ThemedText>
         <View style={styles.badgeContainer}>
           <ThemedText type="small" style={styles.badgeText}>
-            v1.0.0
+            v{Constants.expoConfig?.version}
           </ThemedText>
         </View>
       </View>
