@@ -36,12 +36,8 @@ export async function getDataRiskReportUrl(
 
 export type DailyBalanceItem = {
   currency: string;
-  balance: number;
   in: number;
   out: number;
-  adjustment: number;
-  expense: number;
-  rm: number;
   rate: number;
   closingBalance: number;
 };
@@ -83,11 +79,8 @@ export async function getDailyBalanceReportUrl(date: Date): Promise<string> {
 
 export type DailyStockItem = {
   currency: string;
-  ob: number;
   obRM: number;
-  buy: number;
   buyRM: number;
-  sale: number;
   saleRM: number;
   saleCost: number;
   balance: number;
@@ -123,11 +116,9 @@ export type MarginProfitItem = {
   buyRM: number;
   sale: number;
   saleRM: number;
-  saleCost: number;
   balance: number;
   balanceRM: number;
   profit: number;
-  marginPercent: number;
 };
 
 type MarginProfitResponse = {
@@ -188,23 +179,9 @@ export type DetailTransactionItem = {
   rate: number;
   rm: number;
   bank: string | null;
-  accode: string | null;
   customer: string | null;
-  icNo: string | null;
-  user: string;
   status: string;
   pcCode: string;
-  tType: string;
-  sFund: string | null;
-  tPurpose: string | null;
-  tsFund: string | null;
-  dob: string | null;
-  add1: string | null;
-  add2: string | null;
-  add3: string | null;
-  sFundName: string | null;
-  position: string | null;
-  nationality: string | null;
 };
 
 export type DetailTransactionStatus = "ALL" | "B" | "S";
@@ -264,9 +241,7 @@ export type PurchaseSalesTransactionItem = {
   rm: number;
   bank: string | null;
   customer: string | null;
-  icNo: string | null;
   pcCode: string;
-  status: string;
 };
 
 export type PurchaseSalesGroup = {
@@ -294,10 +269,7 @@ export type CancelledTransactionItem = {
   rate: number;
   rm: number;
   customer: string | null;
-  icNo: string | null;
-  pcCode: string;
   user: string;
-  remarks: string | null;
   remCancel: string | null;
 };
 
@@ -370,7 +342,6 @@ export type ExpensesListingItem = {
   date: string;
   glCode: string | null;
   description: string | null;
-  receipt: string | null;
   rm: number;
 };
 
